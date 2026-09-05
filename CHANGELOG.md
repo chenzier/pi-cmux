@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Associate sidebar status with its cmux surface and Pi process so cmux removes stale status when a surface exits.
+
 ## [0.1.16] - 2026-05-27
 
 ### Added

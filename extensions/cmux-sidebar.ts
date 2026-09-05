@@ -445,6 +445,7 @@ export default function cmuxSidebarExtension(pi: ExtensionAPI) {
 	}
 
 	const statusKey = getStatusKey();
+	const panelId = process.env.CMUX_SURFACE_ID?.trim() || process.env.CMUX_PANEL_ID?.trim();
 	const source = process.env.PI_CMUX_SIDEBAR_SOURCE?.trim() || "pi";
 	const priority = getNumberFromEnv("PI_CMUX_SIDEBAR_STATUS_PRIORITY", DEFAULT_STATUS_PRIORITY);
 	const thresholdMs = getNumberFromEnv(
@@ -524,6 +525,9 @@ export default function cmuxSidebarExtension(pi: ExtensionAPI) {
 			style.color,
 			"--priority",
 			String(priority),
+			...(panelId ? ["--panel", panelId] : []),
+			"--pid",
+			String(process.pid),
 		]);
 	};
 

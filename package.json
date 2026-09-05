@@ -25,6 +25,7 @@
     "pi-cmux": "install.mjs"
   },
   "scripts": {
+    "test": "node --test tests/*.test.mjs",
     "typecheck": "tsc --noEmit --module NodeNext --moduleResolution NodeNext --target ES2022 --allowImportingTsExtensions --skipLibCheck --strict extensions/*.ts",
     "pack:check": "npm pack --dry-run"
   },
