@@ -103,7 +103,7 @@ Use `/ck` to open Hunk in a cmux split, add Hunk comments while reviewing, then 
 
 `pi-cmux` also exposes an agent tool so Pi can open an explicitly requested terminal command in a cmux split or tab. For example, asking "open k9s in a new tab" lets Pi open `k9s` without trying to capture the TUI through a shell command.
 
-cmux workspace/surface targeting uses `CMUX_WORKSPACE_ID` and `CMUX_SURFACE_ID` automatically. Sidebar integration only activates inside a cmux workspace.
+cmux workspace/surface targeting uses `CMUX_WORKSPACE_ID` and `CMUX_SURFACE_ID` automatically. New splits and tabs use cmux's returned surface IDs; older responses fall back to bounded discovery that rejects ambiguous matches. Sidebar integration only activates inside a cmux workspace.
 
 ## Bundled resources
 
@@ -120,4 +120,4 @@ npm test
 npm run pack:check
 ```
 
-The development Pi version and lockfile are pinned for reproducible installs. Dependabot checks for Pi updates weekly and opens pull requests; CI runs type checks, CLI argument/quoting tests, and extension lifecycle tests on Node.js 22.19.0 and 24. Tests use the installed Pi parser and in-process stubs, without starting Pi sessions or cmux panes.
+The development Pi version and lockfile are pinned for reproducible installs. Dependabot checks for Pi updates weekly and opens pull requests; CI runs type checks, CLI argument/quoting tests, surface-targeting tests, and extension lifecycle tests on Node.js 22.19.0 and 24. Tests use the installed Pi parser and in-process stubs, without starting Pi sessions or cmux panes.

@@ -55,6 +55,8 @@ PI_CMUX_SIDEBAR_STATUS_KEY=my-key    # override status key
 
 ## Split tab names
 
+Split and tab creation uses the surface ID returned by cmux to target command startup and naming, rather than guessing from newly visible panes. Older cmux responses without an ID use bounded discovery; ambiguous results fail without starting a command or renaming a surface.
+
 Commands that spawn a split rename the new cmux tab/surface as `<title> · <repo-or-dir>`, using the git repo basename when available and the working-directory basename otherwise. Examples: `Pi · pi-cmux`, `Review · pi-cmux`, `Continue · fix-sidebar`, `npm test · pi-cmux`.
 
 ## Split Pi sessions
