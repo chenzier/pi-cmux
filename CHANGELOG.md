@@ -9,6 +9,7 @@
 
 ### Fixed
 
+- Delay notifications, final sidebar states, logs, and flashes until Pi fully settles, avoiding premature completion during automatic retries, compaction, and queued follow-ups.
 - Stop option parsing before initial prompts so dash-prefixed text is not interpreted as Pi CLI flags.
 
 ### Added

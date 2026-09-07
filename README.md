@@ -42,8 +42,8 @@ If Pi is already running:
 
 | Workflow | Commands | Summary |
 |---|---|---|
-| Notifications | automatic | Sends `cmux notify` when Pi waits, completes work, or errors. |
-| Sidebar status/log | automatic | Updates cmux status, progress, logs, and surface flash while Pi runs. |
+| Notifications | automatic | Sends `cmux notify` once Pi settles after retries, compaction, and queued follow-ups. |
+| Sidebar status/log | automatic | Updates cmux status, progress, and logs while Pi runs, then flashes once Pi settles. |
 | Split Pi | `/cmv [prompt]`, `/cmh [prompt]` | Opens a new right/lower split with Pi in the same project. |
 | Run a tool | `/cmo <cmd>`, `/cmoh <cmd>`, `/cmt <cmd>` | Opens a split or tab and runs a shell command in the same project. |
 | Pluggable tools | custom `/<name>` | Registers cmux split shortcuts from `pi-cmux.commands` settings. |
@@ -120,4 +120,4 @@ npm test
 npm run pack:check
 ```
 
-The development Pi version and lockfile are pinned for reproducible installs. Dependabot checks for Pi updates weekly and opens pull requests; CI runs type checks and CLI argument/quoting tests on Node.js 22.19.0 and 24. Tests use the installed Pi parser and a stub executable, without starting Pi sessions or cmux panes.
+The development Pi version and lockfile are pinned for reproducible installs. Dependabot checks for Pi updates weekly and opens pull requests; CI runs type checks, CLI argument/quoting tests, and extension lifecycle tests on Node.js 22.19.0 and 24. Tests use the installed Pi parser and in-process stubs, without starting Pi sessions or cmux panes.
