@@ -2,6 +2,20 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Require Pi 0.85.1 or newer and Node.js 22.19.0 or newer; update the pinned development Pi dependency and lockfile.
+- Support quoted provider, model, and thinking options, including `max`, in the shared Pi command builder.
+
+### Fixed
+
+- Stop option parsing before initial prompts so dash-prefixed text is not interpreted as Pi CLI flags.
+
+### Added
+
+- Added shell-quoting and installed Pi parser regression tests, with CI coverage on Node.js 22.19.0 and 24.
+- Added weekly Dependabot pull requests for Pi dependency updates.
+
 ## [0.1.16] - 2026-05-27
 
 ### Added

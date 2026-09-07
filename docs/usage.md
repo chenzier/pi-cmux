@@ -67,6 +67,7 @@ Commands that spawn a split rename the new cmux tab/surface as `<title> · <repo
 - `/cmv` opens a split to the right.
 - `/cmh` opens a split below.
 - Both start `pi` in the same working directory.
+- Initial prompts are shell-quoted and passed after `--`, so text such as `--help` stays a prompt rather than becoming a Pi option. Inputs beginning with `@` retain Pi's file-input behavior.
 
 Examples:
 

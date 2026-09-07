@@ -10,6 +10,15 @@ const MAX_TAB_TITLE_LENGTH = 48;
 const TAB_TITLE_SEPARATOR = " · ";
 
 export type SplitDirection = "right" | "down";
+export type PiThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+
+export interface PiCommandOptions {
+	sessionFile?: string;
+	prompt?: string;
+	provider?: string;
+	model?: string;
+	thinking?: PiThinkingLevel;
+}
 
 interface CmuxCallerInfo {
 	workspace_ref?: string;
@@ -72,14 +81,23 @@ export function shellEscape(value: string): string {
 	return `'${value.replace(/'/g, `'\\''`)}'`;
 }
 
-export function buildPiCommand(cwd: string, options?: { sessionFile?: string; prompt?: string }): string {
+export function buildPiCommand(cwd: string, options?: PiCommandOptions): string {
 	const commandParts = ["cd", shellEscape(cwd), "&&", "exec", "pi"];
 	if (options?.sessionFile) {
 		commandParts.push("--session", shellEscape(options.sessionFile));
 	}
+	if (options?.provider) {
+		commandParts.push("--provider", shellEscape(options.provider));
+	}
+	if (options?.model) {
+		commandParts.push("--model", shellEscape(options.model));
+	}
+	if (options?.thinking) {
+		commandParts.push("--thinking", shellEscape(options.thinking));
+	}
 	const prompt = options?.prompt?.trim();
 	if (prompt) {
-		commandParts.push(shellEscape(prompt));
+		commandParts.push("--", shellEscape(prompt));
 	}
 	return commandParts.join(" ");
 }

@@ -14,6 +14,14 @@ Pi package with [cmux](https://www.cmux.dev)-powered terminal integrations for [
 
 ## Install
 
+Requires Pi **0.85.1 or newer** and Node.js **22.19.0 or newer**. The `pi` executable on your `PATH` must also meet this requirement. Update Pi if needed:
+
+```bash
+npm install -g --ignore-scripts @earendil-works/pi-coding-agent@latest
+```
+
+Then install the package:
+
 ```bash
 pi install npm:pi-cmux
 ```
@@ -102,3 +110,14 @@ cmux workspace/surface targeting uses `CMUX_WORKSPACE_ID` and `CMUX_SURFACE_ID` 
 Extensions: `cmux-notify`, `cmux-sidebar`, `cmux-split`, `cmux-open`, `cmux-zoxide`, `cmux-review`, `cmux-continue`.
 
 `pi-cmux` intentionally does not bundle generic review skills or prompt templates, so packages that provide `/review`, `/review-diff`, or `code-review` can own those names without conflicts.
+
+## Development
+
+```bash
+npm ci --ignore-scripts
+npm run typecheck
+npm test
+npm run pack:check
+```
+
+The development Pi version and lockfile are pinned for reproducible installs. Dependabot checks for Pi updates weekly and opens pull requests; CI runs type checks and CLI argument/quoting tests on Node.js 22.19.0 and 24. Tests use the installed Pi parser and a stub executable, without starting Pi sessions or cmux panes.
