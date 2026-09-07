@@ -52,6 +52,8 @@ If Pi is already running:
 | Continue in worktree | `/cmcv -c <branch> [--from <ref>] [note]` | Creates a branch worktree and starts Pi there with handoff context. |
 | Review in split | `/cmrv [flags] [target]`, `/cmrh [flags] [target]` | Starts a focused review session in a split. |
 
+New Pi sessions preserve the calling Pi process's `PATH`, so Pi and Node remain discoverable even when cmux has a different terminal environment. This does not copy shell aliases or functions.
+
 Detailed command examples: [docs/usage.md](docs/usage.md).
 
 ## Common examples

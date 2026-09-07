@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 import { test } from "node:test";
@@ -10,38 +10,53 @@ import { buildPiCommand } from "../extensions/cmux-core.ts";
 const piEntry = import.meta.resolve("@earendil-works/pi-coding-agent");
 const { parseArgs } = await import(new URL("./cli/args.js", piEntry).href);
 
-function captureLaunch(t, options) {
+function captureLaunch(t, options, terminalPath = "/usr/bin:/bin") {
 	const root = realpathSync(mkdtempSync(join(tmpdir(), "pi-cmux-command-")));
 	t.after(() => rmSync(root, { recursive: true, force: true }));
 	const cwd = join(root, "project's $HOME $(printf wrong) `printf wrong`; files");
-	const bin = join(root, "bin");
-	const capture = join(root, "capture.cjs");
+	const bin = join(root, "bin's $HOME $(printf wrong) `printf wrong`; tools");
 	mkdirSync(cwd);
 	mkdirSync(bin);
 	writeFileSync(join(cwd, "glob.txt"), "");
-	writeFileSync(capture, "process.stdout.write(JSON.stringify({ cwd: process.cwd(), args: process.argv.slice(2) }));\n");
-	writeFileSync(join(bin, "pi"), '#!/bin/sh\nexec "$CMUX_TEST_NODE" "$CMUX_TEST_CAPTURE" "$@"\n', { mode: 0o755 });
+	symlinkSync(process.execPath, join(bin, "node"));
+	writeFileSync(join(bin, "pi"), '#!/usr/bin/env node\nprocess.stdout.write(JSON.stringify({ cwd: process.cwd(), args: process.argv.slice(2), path: process.env.PATH }));\n', { mode: 0o755 });
 
-	// Run the actual generated shell command, but capture argv instead of starting Pi or cmux.
-	const result = spawnSync("/bin/sh", ["-c", buildPiCommand(cwd, options)], {
+	const callerPath = [bin, "/usr/bin", "/bin"].join(delimiter);
+	const previousPath = process.env.PATH;
+	let command;
+	try {
+		process.env.PATH = callerPath;
+		command = buildPiCommand(cwd, options);
+	} finally {
+		if (previousPath === undefined) delete process.env.PATH;
+		else process.env.PATH = previousPath;
+	}
+
+	// cmux's app environment can have a different PATH from the invoking Pi process.
+	// Execute the real command and Node shebang without starting Pi or cmux.
+	const result = spawnSync("/bin/sh", ["-c", command], {
 		encoding: "utf8",
 		timeout: 10_000,
 		env: {
 			...process.env,
-			PATH: `${bin}${delimiter}${process.env.PATH ?? ""}`,
-			CMUX_TEST_NODE: process.execPath,
-			CMUX_TEST_CAPTURE: capture,
+			PATH: terminalPath,
 		},
 	});
 	assert.ifError(result.error);
 	assert.equal(result.status, 0, result.stderr);
 	const captured = JSON.parse(result.stdout);
 	assert.equal(captured.cwd, cwd);
+	assert.equal(captured.path, callerPath);
 	const parsed = parseArgs(captured.args);
 	assert.deepEqual(parsed.diagnostics, []);
 	assert.equal(parsed.unknownFlags.size, 0);
 	return { args: captured.args, parsed };
 }
+
+test("preserve caller PATH for Pi and Node when the terminal PATH is empty", (t) => {
+	const { args } = captureLaunch(t, { prompt: "--help" }, "");
+	assert.deepEqual(args, ["--", "--help"]);
+});
 
 test("launch without options stays fresh and uses Pi defaults", (t) => {
 	const { args, parsed } = captureLaunch(t);

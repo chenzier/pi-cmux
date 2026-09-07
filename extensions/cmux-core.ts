@@ -97,7 +97,12 @@ export function shellEscape(value: string): string {
 }
 
 export function buildPiCommand(cwd: string, options?: PiCommandOptions): string {
-	const commandParts = ["cd", shellEscape(cwd), "&&", "exec", "pi"];
+	const commandParts = ["cd", shellEscape(cwd), "&&"];
+	// cmux respawns from the app's environment, which may have a different PATH.
+	if (process.env.PATH !== undefined) {
+		commandParts.push(`PATH=${shellEscape(process.env.PATH)}`);
+	}
+	commandParts.push("exec", "pi");
 	if (options?.sessionFile) {
 		commandParts.push("--session", shellEscape(options.sessionFile));
 	}

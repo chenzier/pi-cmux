@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [0.1.19] - 2026-09-07
+
+### Fixed
+
+- Preserve the calling Pi process's `PATH` when launching new Pi sessions, fixing `pi: not found` when cmux's terminal environment cannot find Pi or Node.
+
 ## [0.1.18] - 2026-09-07
 
 ### Changed
