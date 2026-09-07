@@ -14,6 +14,7 @@
 ### Fixed
 
 - Preserve the calling Pi process's `PATH` when launching new Pi sessions, fixing `pi: not found` when cmux's terminal environment cannot find Pi or Node.
+- Preserve the same `PATH` for `cmux_open_terminal`, `/cmo`, `/cmov`, `/cmoh`, `/cmt`, and configured tool shortcuts, fixing `hunk: command not found` and similar failures in splits and tabs. Launch the system shell via `/bin/sh -c` without loading login profiles that could overwrite `PATH`.
 
 ## [0.1.18] - 2026-09-07
 

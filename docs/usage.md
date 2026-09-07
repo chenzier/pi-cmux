@@ -94,7 +94,8 @@ Legacy aliases:
 - `/cmo` opens a split to the right and runs a shell command.
 - `/cmoh` opens a split below and runs a shell command.
 - `/cmt` opens a new cmux tab and runs a shell command.
-- Commands run via `sh -lc` in the current project directory.
+- Commands run via `/bin/sh -c` in the current project directory, preserving the calling Pi process's `PATH`.
+- Login profiles are not loaded, and shell aliases/functions are not copied. If a command needs shell initialization, request it explicitly (for example, `/cmo zsh -lic 'my-alias'`).
 
 Examples:
 
@@ -121,7 +122,7 @@ open lazygit in a right split
 open npm run dev below
 ```
 
-The tool supports `tab`, `right`, and `down` placements. It is meant for TUIs, log tails, dev servers, watches, and other terminal views that should remain interactive instead of being captured through the normal shell tool.
+The tool supports `tab`, `right`, and `down` placements. It uses the same `/bin/sh -c` launch and caller `PATH` as the tool commands above. It is meant for TUIs, log tails, dev servers, watches, and other terminal views that should remain interactive instead of being captured through the normal shell tool.
 
 ## Pluggable tool commands
 
@@ -144,7 +145,7 @@ Simple form:
 }
 ```
 
-Each configured command opens a right cmux split by default and runs via `sh -lc` in the current project directory.
+Each configured command opens a right cmux split by default and runs via `/bin/sh -c` in the current project directory, preserving the calling Pi process's `PATH` without loading login profiles.
 
 Examples:
 

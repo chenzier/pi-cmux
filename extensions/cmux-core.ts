@@ -96,13 +96,18 @@ export function shellEscape(value: string): string {
 	return `'${value.replace(/'/g, `'\\''`)}'`;
 }
 
-export function buildPiCommand(cwd: string, options?: PiCommandOptions): string {
+function buildCommandPrefix(cwd: string): string[] {
 	const commandParts = ["cd", shellEscape(cwd), "&&"];
 	// cmux respawns from the app's environment, which may have a different PATH.
 	if (process.env.PATH !== undefined) {
 		commandParts.push(`PATH=${shellEscape(process.env.PATH)}`);
 	}
-	commandParts.push("exec", "pi");
+	commandParts.push("exec");
+	return commandParts;
+}
+
+export function buildPiCommand(cwd: string, options?: PiCommandOptions): string {
+	const commandParts = [...buildCommandPrefix(cwd), "pi"];
 	if (options?.sessionFile) {
 		commandParts.push("--session", shellEscape(options.sessionFile));
 	}
@@ -123,7 +128,8 @@ export function buildPiCommand(cwd: string, options?: PiCommandOptions): string 
 }
 
 export function buildShellCommand(cwd: string, command: string): string {
-	return ["cd", shellEscape(cwd), "&&", "exec", "sh", "-lc", shellEscape(command)].join(" ");
+	// Use the system shell without login profiles that could overwrite the caller PATH.
+	return [...buildCommandPrefix(cwd), "/bin/sh", "-c", shellEscape(command)].join(" ");
 }
 
 function normalizeTabTitle(value: string | undefined, fallback: string): string {
