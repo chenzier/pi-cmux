@@ -524,7 +524,8 @@ export default function cmuxSidebarExtension(pi: ExtensionAPI) {
 	};
 
 	const clearStatus = (): void => {
-		enqueueCmux(["clear-status", statusKey]);
+		// Follow the same owner as setStatus if the surface moves to another workspace.
+		enqueueCmux(["clear-status", statusKey, ...(panelId ? ["--panel", panelId] : [])]);
 	};
 
 	const appendLog = (level: LogLevel, message: string): void => {
