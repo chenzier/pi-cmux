@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+## [0.1.20] - 2026-09-08
+
+### Fixed
+
+- Associate sidebar status with its cmux surface and Pi process so cmux can remove stale status after an exit.
+- Keep delayed, shutdown, and startup status cleanup targeting the owning surface after it moves to another workspace.
+
 ## [0.1.19] - 2026-09-07
 
 ### Fixed
