@@ -4,7 +4,7 @@ Detailed usage for the cmux integrations bundled with `pi-cmux`.
 
 ## Notifications
 
-`cmux-notify` sends `cmux notify` alerts when Pi finishes a run.
+`cmux-notify` sends `cmux notify` alerts once Pi fully settles. It waits for automatic retries, compaction retries, and queued follow-up messages.
 
 Notification fields:
 - title: `Pi` by default
@@ -37,7 +37,7 @@ It uses:
 - `cmux set-status` for a temporary Pi status pill while Pi is running, using tools, waiting, done, or errored
 - `cmux set-progress` for coarse run progress and live token counts while Pi is active
 - `cmux log` for run starts, changed files, warnings, final summaries, and compact session token counts, with cached input split out
-- `cmux trigger-flash` when a run finishes and the surface needs attention
+- `cmux trigger-flash` once a run fully settles and the surface needs attention
 
 Environment settings:
 
@@ -55,6 +55,8 @@ PI_CMUX_SIDEBAR_STATUS_KEY=my-key    # override status key
 
 ## Split tab names
 
+Split and tab creation uses the surface ID returned by cmux to target command startup and naming, rather than guessing from newly visible panes. Older cmux responses without an ID use bounded discovery; ambiguous results fail without starting a command or renaming a surface.
+
 Commands that spawn a split rename the new cmux tab/surface as `<title> · <repo-or-dir>`, using the git repo basename when available and the working-directory basename otherwise. Examples: `Pi · pi-cmux`, `Review · pi-cmux`, `Continue · fix-sidebar`, `npm test · pi-cmux`.
 
 ## Split Pi sessions
@@ -67,6 +69,7 @@ Commands that spawn a split rename the new cmux tab/surface as `<title> · <repo
 - `/cmv` opens a split to the right.
 - `/cmh` opens a split below.
 - Both start `pi` in the same working directory.
+- Initial prompts are shell-quoted and passed after `--`, so text such as `--help` stays a prompt rather than becoming a Pi option. Inputs beginning with `@` retain Pi's file-input behavior.
 
 Examples:
 

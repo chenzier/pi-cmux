@@ -6,6 +6,31 @@
 
 - Associate sidebar status with its cmux surface and Pi process so cmux removes stale status when a surface exits.
 
+## [0.1.19] - 2026-09-07
+
+### Fixed
+
+- Preserve the calling Pi process's `PATH` when launching new Pi sessions, fixing `pi: not found` when cmux's terminal environment cannot find Pi or Node.
+
+## [0.1.18] - 2026-09-07
+
+### Changed
+
+- Require Pi 0.85.1 or newer and Node.js 22.19.0 or newer; update the pinned development Pi dependency and lockfile.
+- Support quoted provider, model, and thinking options, including `max`, in the shared Pi command builder.
+
+### Fixed
+
+- Use cmux's returned surface IDs when opening splits and tabs to avoid respawning or renaming another terminal during concurrent creation. Retain bounded discovery for older cmux responses and reject ambiguous matches.
+- Delay notifications, final sidebar states, logs, and flashes until Pi fully settles, avoiding premature completion during automatic retries, compaction, and queued follow-ups.
+- Stop option parsing before initial prompts so dash-prefixed text is not interpreted as Pi CLI flags.
+
+### Added
+
+- Added shell-quoting and installed Pi parser regression tests, with CI coverage on Node.js 22.19.0 and 24.
+- Added surface-targeting regression tests for direct IDs, concurrent launches, and legacy discovery failures.
+- Added weekly Dependabot pull requests for Pi dependency updates.
+
 ## [0.1.16] - 2026-05-27
 
 ### Added

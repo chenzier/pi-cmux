@@ -1,4 +1,4 @@
-import type { ExtensionAPI, ToolResultEvent } from "@earendil-works/pi-coding-agent";
+import type { AgentEndEvent, ExtensionAPI, ToolResultEvent } from "@earendil-works/pi-coding-agent";
 import {
 	isBashToolResult,
 	isEditToolResult,
@@ -231,6 +231,8 @@ export default function cmuxNotifyExtension(pi: ExtensionAPI) {
 	const title = process.env.PI_CMUX_NOTIFY_TITLE || "Pi";
 
 	let runState = createEmptyRunState();
+	let logicalRunActive = false;
+	let pendingCompletionMessages: AgentEndEvent["messages"] | undefined;
 	let lastNotificationAt = 0;
 	let lastNotificationKey = "";
 	let cmuxUnavailable = false;
@@ -265,6 +267,9 @@ export default function cmuxNotifyExtension(pi: ExtensionAPI) {
 	};
 
 	pi.on("agent_start", async () => {
+		if (logicalRunActive) return;
+		logicalRunActive = true;
+		pendingCompletionMessages = undefined;
 		runState = createEmptyRunState();
 	});
 
@@ -296,8 +301,18 @@ export default function cmuxNotifyExtension(pi: ExtensionAPI) {
 	});
 
 	pi.on("agent_end", async (event) => {
+		pendingCompletionMessages = [...event.messages];
+	});
+
+	pi.on("agent_settled", async (_event, ctx) => {
+		if (!ctx.isIdle() || !pendingCompletionMessages) return;
+
+		const messages = pendingCompletionMessages;
+		pendingCompletionMessages = undefined;
+		logicalRunActive = false;
+
 		const durationMs = Date.now() - runState.startedAt;
-		const runError = summarizeRunError(event.messages, runState.firstToolError);
+		const runError = summarizeRunError(messages, runState.firstToolError);
 		const subtitle = buildSubtitle(Boolean(runError), runState, durationMs, thresholdMs);
 		if (!shouldNotify(notifyLevel, subtitle)) {
 			return;
@@ -305,7 +320,7 @@ export default function cmuxNotifyExtension(pi: ExtensionAPI) {
 		let body = runError || summarizeSuccess(runState, durationMs, thresholdMs);
 
 		if (!runError && includeAssistantResponse) {
-			const responseText = getAssistantResponseText(event.messages);
+			const responseText = getAssistantResponseText(messages);
 			if (responseText) {
 				body = `${body}\n${responseText}`;
 			}

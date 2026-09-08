@@ -14,6 +14,14 @@ Pi package with [cmux](https://www.cmux.dev)-powered terminal integrations for [
 
 ## Install
 
+Requires Pi **0.85.1 or newer** and Node.js **22.19.0 or newer**. The `pi` executable on your `PATH` must also meet this requirement. Update Pi if needed:
+
+```bash
+npm install -g --ignore-scripts @earendil-works/pi-coding-agent@latest
+```
+
+Then install the package:
+
 ```bash
 pi install npm:pi-cmux
 ```
@@ -34,8 +42,8 @@ If Pi is already running:
 
 | Workflow | Commands | Summary |
 |---|---|---|
-| Notifications | automatic | Sends `cmux notify` when Pi waits, completes work, or errors. |
-| Sidebar status/log | automatic | Updates cmux status, progress, logs, and surface flash while Pi runs. |
+| Notifications | automatic | Sends `cmux notify` once Pi settles after retries, compaction, and queued follow-ups. |
+| Sidebar status/log | automatic | Updates cmux status, progress, and logs while Pi runs, then flashes once Pi settles. |
 | Split Pi | `/cmv [prompt]`, `/cmh [prompt]` | Opens a new right/lower split with Pi in the same project. |
 | Run a tool | `/cmo <cmd>`, `/cmoh <cmd>`, `/cmt <cmd>` | Opens a split or tab and runs a shell command in the same project. |
 | Pluggable tools | custom `/<name>` | Registers cmux split shortcuts from `pi-cmux.commands` settings. |
@@ -43,6 +51,8 @@ If Pi is already running:
 | Continue task | `/cmcv [note]`, `/cmch [note]` | Opens a related handoff session in a split. |
 | Continue in worktree | `/cmcv -c <branch> [--from <ref>] [note]` | Creates a branch worktree and starts Pi there with handoff context. |
 | Review in split | `/cmrv [flags] [target]`, `/cmrh [flags] [target]` | Starts a focused review session in a split. |
+
+New Pi sessions preserve the calling Pi process's `PATH`, so Pi and Node remain discoverable even when cmux has a different terminal environment. This does not copy shell aliases or functions.
 
 Detailed command examples: [docs/usage.md](docs/usage.md).
 
@@ -95,10 +105,21 @@ Use `/ck` to open Hunk in a cmux split, add Hunk comments while reviewing, then 
 
 `pi-cmux` also exposes an agent tool so Pi can open an explicitly requested terminal command in a cmux split or tab. For example, asking "open k9s in a new tab" lets Pi open `k9s` without trying to capture the TUI through a shell command.
 
-cmux workspace/surface targeting uses `CMUX_WORKSPACE_ID` and `CMUX_SURFACE_ID` automatically. Sidebar integration only activates inside a cmux workspace.
+cmux workspace/surface targeting uses `CMUX_WORKSPACE_ID` and `CMUX_SURFACE_ID` automatically. New splits and tabs use cmux's returned surface IDs; older responses fall back to bounded discovery that rejects ambiguous matches. Sidebar integration only activates inside a cmux workspace.
 
 ## Bundled resources
 
 Extensions: `cmux-notify`, `cmux-sidebar`, `cmux-split`, `cmux-open`, `cmux-zoxide`, `cmux-review`, `cmux-continue`.
 
 `pi-cmux` intentionally does not bundle generic review skills or prompt templates, so packages that provide `/review`, `/review-diff`, or `code-review` can own those names without conflicts.
+
+## Development
+
+```bash
+npm ci --ignore-scripts
+npm run typecheck
+npm test
+npm run pack:check
+```
+
+The development Pi version and lockfile are pinned for reproducible installs. Dependabot checks for Pi updates weekly and opens pull requests; CI runs type checks, CLI argument/quoting tests, surface-targeting tests, and extension lifecycle tests on Node.js 22.19.0 and 24. Tests use the installed Pi parser and in-process stubs, without starting Pi sessions or cmux panes.
