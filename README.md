@@ -42,7 +42,7 @@ If Pi is already running:
 
 | Workflow | Commands | Summary |
 |---|---|---|
-| Notifications | automatic | Sends `cmux notify` once Pi settles after retries, compaction, and queued follow-ups. |
+| Notifications | automatic | Sends `cmux notify` once Pi settles after retries, compaction, and queued follow-ups. Only fires while Pi runs interactively inside a cmux surface; silent in terminals outside cmux and in headless/embedded runs (SDK, `--print`, JSON, RPC). |
 | Sidebar status/log | automatic | Updates cmux status, progress, and logs while Pi runs, then flashes once Pi settles. |
 | Split Pi | `/cmv [prompt]`, `/cmh [prompt]` | Opens a new right/lower split with Pi in the same project. |
 | Run a tool | `/cmo <cmd>`, `/cmoh <cmd>`, `/cmt <cmd>` | Opens a split or tab and runs a shell command in the same project. |
@@ -74,6 +74,7 @@ Detailed command examples: [docs/usage.md](docs/usage.md).
 | Variable | Default | Purpose |
 |---|---:|---|
 | `PI_CMUX_NOTIFY_LEVEL` | `all` | `all`, `medium`, `low`, or `disabled`. |
+| `PI_CMUX_NOTIFY_FORCE` | `0` | Set `1` to notify even when Pi is not running inside a cmux surface. |
 | `PI_CMUX_NOTIFY_INCLUDE_RESPONSE` | `0` | Append truncated final assistant response to non-error notifications. |
 | `PI_CMUX_NOTIFY_THRESHOLD_MS` | `15000` | Duration threshold for `Task Complete` vs `Waiting`. |
 | `PI_CMUX_SIDEBAR` | `1` | Set `0` to disable sidebar integration. |

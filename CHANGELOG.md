@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Notifications now only fire when Pi runs interactively inside a cmux surface (`ctx.mode === "tui"` plus `CMUX_SURFACE_ID`/`CMUX_PANEL_ID`). Headless and embedded Pi (SDK, `--print`, JSON, RPC) and terminals outside cmux stay silent instead of notifying through a running cmux app; opt back in with `PI_CMUX_NOTIFY_FORCE=1`.
+
 ## [0.1.20] - 2026-09-08
 
 ### Fixed
