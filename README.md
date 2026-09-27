@@ -32,6 +32,8 @@ Or install/update with the package installer:
 npx pi-cmux
 ```
 
+Recommended: run `cmux hooks pi install` for native notifications, session restore, and prompt previews; pi-cmux notifications are opt-in via `PI_CMUX_NOTIFY_LEVEL=all`.
+
 If Pi is already running:
 
 ```text
@@ -42,7 +44,7 @@ If Pi is already running:
 
 | Workflow | Commands | Summary |
 |---|---|---|
-| Notifications | automatic | Sends `cmux notify` once Pi settles after retries, compaction, and queued follow-ups. |
+| Notifications | opt-in | Set `PI_CMUX_NOTIFY_LEVEL=all` to send `cmux notify` once Pi settles after retries, compaction, and queued follow-ups. |
 | Sidebar status/log | automatic | Updates cmux status, progress, and logs while Pi runs, then flashes once Pi settles. |
 | New sidebar chat | `/cmn <prompt>` | Starts a fresh Pi chat in a named workspace in the left sidebar. |
 | Split Pi | `/cmv [prompt]`, `/cmh [prompt]` | Opens a new right/lower split with Pi in the same project. |
@@ -73,7 +75,7 @@ Detailed command examples: [docs/usage.md](docs/usage.md).
 
 | Variable | Default | Purpose |
 |---|---:|---|
-| `PI_CMUX_NOTIFY_LEVEL` | `all` | `all`, `medium`, `low`, or `disabled`. |
+| `PI_CMUX_NOTIFY_LEVEL` | `disabled` | Opt in with `all`, `medium`, or `low`; leave disabled when using native hook notifications. |
 | `PI_CMUX_NOTIFY_INCLUDE_RESPONSE` | `0` | Append truncated final assistant response to non-error notifications. |
 | `PI_CMUX_NOTIFY_THRESHOLD_MS` | `15000` | Duration threshold for `Task Complete` vs `Waiting`. |
 | `PI_CMUX_SIDEBAR` | `1` | Set `0` to disable sidebar integration. |

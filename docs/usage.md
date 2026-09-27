@@ -4,7 +4,9 @@ Detailed usage for the cmux integrations bundled with `pi-cmux`.
 
 ## Notifications
 
-`cmux-notify` sends `cmux notify` alerts once Pi fully settles. It waits for automatic retries, compaction retries, and queued follow-up messages.
+`cmux-notify` is disabled by default. Opt in by setting `PI_CMUX_NOTIFY_LEVEL=all` in Pi's environment, then restart Pi or run `/reload`. Leave it disabled when using native cmux hook notifications to avoid duplicate alerts.
+
+When enabled, it sends `cmux notify` alerts once Pi fully settles, after automatic retries, compaction retries, and queued follow-up messages.
 
 Notification fields:
 - title: `Pi` by default
@@ -26,7 +28,7 @@ Noise controls:
 PI_CMUX_NOTIFY_LEVEL=all       # Waiting, Task Complete, Error
 PI_CMUX_NOTIFY_LEVEL=medium    # Task Complete, Error
 PI_CMUX_NOTIFY_LEVEL=low       # Error only
-PI_CMUX_NOTIFY_LEVEL=disabled  # off
+PI_CMUX_NOTIFY_LEVEL=disabled  # off (default)
 ```
 
 ## Sidebar status/log

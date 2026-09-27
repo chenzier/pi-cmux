@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Notifications are now opt-in: `PI_CMUX_NOTIFY_LEVEL` defaults to `disabled` to avoid duplicating native cmux hook notifications. Set it to `all` to retain the previous default behavior, or choose `medium` or `low` for fewer alerts.
+
 ## [0.1.23] - 2026-09-28
 
 ### Added

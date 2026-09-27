@@ -12,7 +12,7 @@ import { basename } from "node:path";
 const DEFAULT_THRESHOLD_MS = 15000;
 const DEFAULT_DEBOUNCE_MS = 3000;
 const NOTIFY_TIMEOUT_MS = 5000;
-const DEFAULT_NOTIFY_LEVEL = "all";
+const DEFAULT_NOTIFY_LEVEL = "disabled";
 const DEFAULT_INCLUDE_ASSISTANT_RESPONSE = false;
 const ASSISTANT_RESPONSE_MAX_LENGTH = 500;
 
