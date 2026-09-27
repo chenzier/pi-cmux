@@ -90,9 +90,10 @@ function harness(t, options = {}) {
 	};
 }
 
-test("bundle advertises exactly two tools and registers /cmn, not /cmc", (t) => {
+test("bundle advertises browser, terminal, and Pi tools and registers /cmn, not /cmc", (t) => {
 	const h = harness(t, { extension: piCmuxExtension });
-	assert.deepEqual([...h.tools.keys()].sort(), ["cmux_open_terminal", "cmux_start_pi"]);
+	assert.deepEqual([...h.tools.keys()].sort(), ["cmux_open_browser", "cmux_open_terminal", "cmux_start_pi"]);
+	assert.ok(h.commands.has("cmb"));
 	assert.ok(h.commands.has("cmn"));
 	assert.equal(h.commands.has("cmc"), false);
 	assert.ok(h.commands.has("cmcv"));
@@ -114,13 +115,15 @@ test("users can register former review command names as configured shortcuts", (
 	}
 });
 
-test("configured shortcuts cannot replace /cmn", (t) => {
-	const warnings = [];
-	t.mock.method(console, "warn", (message) => warnings.push(message));
-	const h = harness(t, { extension: piCmuxExtension, settings: { "pi-cmux": { commands: { cmn: "echo wrong" } } } });
-	assert.match(h.commands.get("cmn").description, /fresh Pi chat/);
-	assert.ok(warnings.some((warning) => warning.includes("/cmn: command already exists")));
-});
+for (const [name, description] of [["cmn", /fresh Pi chat/], ["cmb", /Open a browser/]]) {
+	test(`configured shortcuts cannot replace /${name}`, (t) => {
+		const warnings = [];
+		t.mock.method(console, "warn", (message) => warnings.push(message));
+		const h = harness(t, { extension: piCmuxExtension, settings: { "pi-cmux": { commands: { [name]: "echo wrong" } } } });
+		assert.match(h.commands.get(name).description, description);
+		assert.ok(warnings.some((warning) => warning.includes(`/${name}: command already exists`)));
+	});
+}
 
 for (const prompt of ["Review the auth flow", "--help", "--handoff", "  First line\nSecond line  ", 'Bob\'s "quoted" task: $HOME $(printf wrong) `printf wrong`; *.txt | cat']) {
 	test(`/cmn launches a fresh workspace and preserves prompt ${JSON.stringify(prompt)}`, async (t) => {

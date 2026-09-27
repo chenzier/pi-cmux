@@ -6,11 +6,11 @@
 [![npm version](https://img.shields.io/npm/v/pi-cmux.svg)](https://www.npmjs.com/package/pi-cmux)
 [![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 
-Pi package with [cmux](https://www.cmux.dev)-powered terminal integrations for [Pi](https://pi.dev).
+Pi package with [cmux](https://www.cmux.dev)-powered terminal and browser integrations for [Pi](https://pi.dev).
 
 ## What it adds
 
-`pi-cmux` keeps Pi terminal-native by delegating notifications, sidebar status, pane splits, tab naming, pluggable tool commands, directory jumps, and continuation workflows to cmux.
+`pi-cmux` keeps Pi terminal-native by delegating notifications, sidebar status, terminal and browser splits, tab naming, pluggable tool commands, directory jumps, and continuation workflows to cmux.
 
 ## Install
 
@@ -47,6 +47,7 @@ If Pi is already running:
 | New sidebar chat | `/cmn <prompt>` | Starts a fresh Pi chat in a named workspace in the left sidebar. |
 | Split Pi | `/cmv [prompt]`, `/cmh [prompt]` | Opens a new right/lower split with Pi in the same project. |
 | Run a tool | `/cmo <cmd>`, `/cmoh <cmd>`, `/cmt <cmd>` | Opens a split or tab and runs a shell command in the same project. |
+| Open a browser | `/cmb [--down] [--focus] <url>` | Opens a browser beside this Pi terminal; keeps focus in Pi by default. |
 | Pluggable tools | custom `/<name>` | Registers cmux split shortcuts from `pi-cmux.commands` settings. |
 | Jump directory | `/cmz <query>`, `/cmzh <query>` | Resolves a zoxide match or path, then opens Pi there. |
 | Continue task | `/cmcv [note]`, `/cmch [note]` | Opens a related handoff session in a split. |
@@ -62,6 +63,7 @@ Detailed command examples: [docs/usage.md](docs/usage.md).
 /cmv Review the auth flow
 /cmo npm test
 /cmt k9s
+/cmb http://localhost:3000
 /cmz mono
 /cmcv focus on tests
 /cmcv -c fix/sidebar --from main
@@ -103,11 +105,13 @@ Use `/ck` to open Hunk in a cmux split, add Hunk comments while reviewing, then 
 
 `pi-cmux` also exposes an agent tool so Pi can open an explicitly requested terminal command in a cmux split or tab. For example, asking "open k9s in a new tab" lets Pi open `k9s` without trying to capture the TUI through a shell command.
 
-cmux workspace/surface targeting uses `CMUX_WORKSPACE_ID` and `CMUX_SURFACE_ID` automatically. New splits and tabs use cmux's returned surface IDs; older responses fall back to bounded discovery that rejects ambiguous matches. Sidebar integration only activates inside a cmux workspace.
+Ask "open http://localhost:3000 beside Pi" to use the `cmux_open_browser` tool. Browser opening supports right/lower splits and absolute HTTP, HTTPS, or local file URLs. It binds the returned browser surface to the active Pi session. This is opening only: annotations, a steering bridge, and browser interaction tools are not implemented yet. See [browser usage and lifecycle](docs/usage.md#browser-splits).
+
+cmux workspace/surface targeting uses `CMUX_WORKSPACE_ID` and `CMUX_SURFACE_ID` automatically. New terminal splits and tabs use cmux's returned surface IDs; older terminal-creation responses fall back to bounded discovery that rejects ambiguous matches. Browser opening requires validated UUIDs and does not use discovery fallbacks. Sidebar integration only activates inside a cmux workspace.
 
 ## Bundled resources
 
-Extensions: `cmux-notify`, `cmux-sidebar`, `cmux-split`, `cmux-open`, `cmux-zoxide`, `cmux-start`, `cmux-continue`.
+Extensions: `cmux-notify`, `cmux-sidebar`, `cmux-split`, `cmux-open`, `cmux-browser`, `cmux-zoxide`, `cmux-start`, `cmux-continue`.
 
 `pi-cmux` does not provide review commands, skills, or prompt templates. Use your preferred review tooling in a new chat or split.
 

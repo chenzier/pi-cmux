@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+## [0.1.23] - 2026-09-28
+
+### Added
+
+- Added `/cmb [--down] [--focus] <url>` and `cmux_open_browser` for explicitly requested browser splits, targeting the calling Pi terminal and keeping focus in Pi by default.
+- Added runtime-only browser/session bindings, bounded and cancellable cmux calls, strict target validation, and regression tests. Lifecycle cleanup leaves browser panes open. This stage provides opening only, without annotations, a steering bridge, or browser interaction tools.
+
 ## [0.1.22] - 2026-09-27
 
 ### Removed

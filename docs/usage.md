@@ -124,6 +124,26 @@ open npm run dev below
 
 The tool supports `tab`, `right`, and `down` placements. It uses the same `/bin/sh -c` launch and caller `PATH` as the tool commands above. It is meant for TUIs, log tails, dev servers, watches, and other terminal views that should remain interactive instead of being captured through the normal shell tool.
 
+## Browser splits
+
+```text
+/cmb http://localhost:3000
+/cmb --down https://example.com
+/cmb --focus file:///tmp/preview.html
+```
+
+- `/cmb [--down] [--focus] <url>` opens a new browser split relative to the calling Pi terminal, not the focused pane.
+- Defaults to a right split without taking focus. `--down` opens below; `--focus` focuses the new browser. Flags precede the URL.
+- URLs must be absolute HTTP, HTTPS, or local `file://` URLs, without embedded credentials. Percent-encode spaces. Bare hostnames, filesystem paths, remote file hosts, and other URL schemes are rejected.
+- The `cmux_open_browser` agent tool accepts `url`, optional `placement` (`right` or `down`), and optional `focus` (default `false`). Use it for explicit requests such as "open http://localhost:3000 in a browser below Pi."
+- This opens a plain browser only. It does not enable native Design Mode, inject annotations, steer Pi, or expose page interaction tools. Successful opening confirms creation, not page readiness or an HTTP success response.
+
+Browser opening was tested on cmux **0.64.25**. It requires UUID-bearing caller/creation responses and the `pane.create` RPC; older versions have not been verified. Missing cmux, disabled browser support, incompatible responses, and timeouts produce errors rather than focus-based fallbacks. The extension does not enable browser support globally.
+
+The returned browser UUID is bound in memory to the current Pi session. Quit, `/reload`, and session replacement clear bindings and cancel pending calls, **but leave browser panes open**. Bindings are not restored automatically. This first stage has no background polling, browser-close watcher, or external resources; future browser actions must revalidate their target before use.
+
+Creation is attempted once. If a request times out, is cancelled, or returns an invalid target, a split may already exist. Inspect cmux before retrying; the extension never closes an unverified surface or guesses a replacement.
+
 ## Pluggable tool commands
 
 Register custom split shortcuts in Pi settings under `pi-cmux.commands`.
@@ -191,7 +211,7 @@ Supported object keys:
 - `description` — optional slash-command description
 - `disabled` — set to `true` in project settings to remove a global configured command
 
-Configured command names cannot reuse built-in Pi commands such as `/settings`, `/model`, or `/reload`, and they cannot replace `pi-cmux` commands such as `/cmn`, `/cmv`, `/cmo`, `/cmz`, or `/cmcv`.
+Configured command names cannot reuse built-in Pi commands such as `/settings`, `/model`, or `/reload`, and they cannot replace `pi-cmux` commands such as `/cmn`, `/cmb`, `/cmv`, `/cmo`, `/cmz`, or `/cmcv`.
 
 If the same command exists in both global and project settings, the project setting wins. After changing settings, run `/reload` in Pi.
 
