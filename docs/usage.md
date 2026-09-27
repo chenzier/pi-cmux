@@ -191,7 +191,7 @@ Supported object keys:
 - `description` — optional slash-command description
 - `disabled` — set to `true` in project settings to remove a global configured command
 
-Configured command names cannot reuse built-in Pi commands such as `/settings`, `/model`, or `/reload`, and they cannot replace `pi-cmux` commands such as `/cmv`, `/cmo`, `/cmz`, `/cmrv`, or `/cmcv`.
+Configured command names cannot reuse built-in Pi commands such as `/settings`, `/model`, or `/reload`, and they cannot replace `pi-cmux` commands such as `/cmn`, `/cmv`, `/cmo`, `/cmz`, or `/cmcv`.
 
 If the same command exists in both global and project settings, the project setting wins. After changing settings, run `/reload` in Pi.
 
@@ -248,43 +248,18 @@ Same-checkout continuation creates a related handoff session and adds a summary 
 
 Worktree continuation starts a new session in the target worktree and seeds it with structured handoff context from the source pane.
 
-## Review workflows
+## User-provided review workflows
 
-Split review commands:
-
-```text
-/cmrv
-/cmrh
-/cmrv [--bugs|--refactor|--tests] <target>
-/cmrh [--bugs|--refactor|--tests] <target>
-/cmrv --diff [focus]
-/cmrh --diff [focus]
-```
-
-- `/cmrv` opens a review split to the right.
-- `/cmrh` opens a review split below.
-- With no arguments, both default to reviewing the current git diff.
-- A GitHub PR URL switches the prompt to PR review and asks Pi to inspect it with `gh pr view` and `gh pr diff`.
-- If another Pi package provides `code-review`, the generated prompt asks Pi to use it when available.
-
-Examples:
+`pi-cmux` does not provide review commands, skills, or prompt templates. Start a normal Pi session and request your preferred review workflow:
 
 ```text
-/cmrv
-/cmrh
-/cmrv src/auth.ts
-/cmrv --bugs src/auth.ts
-/cmrh --refactor src/auth/
-/cmrv --diff
-/cmrh --diff focus on token refresh and retries
-/cmrv https://github.com/owner/repo/pull/123
+/cmn Review this diff using my review skill
+/cmv Review src/auth.ts using my review skill
 ```
 
-Legacy aliases:
-- `/review-v` → `/cmrv`
-- `/review-h` → `/cmrh`
+Or ask Pi to start a review chat in a new split with `cmux_start_pi`. The supplied prompt selects the review tooling; `pi-cmux` does not prescribe it.
 
-`pi-cmux` does not ship generic in-place `/review`, `/review-diff`, or `code-review` resources. Use those from another package if installed.
+The former `/cmrv`, `/cmrh`, `/review-v`, and `/review-h` commands are no longer registered or reserved, so other packages or configured shortcuts can use those names.
 
 ## Environment variables
 

@@ -97,10 +97,21 @@ test("bundle advertises exactly two tools and registers /cmn, not /cmc", (t) => 
 	assert.equal(h.commands.has("cmc"), false);
 	assert.ok(h.commands.has("cmcv"));
 	assert.ok(h.commands.has("cmch"));
+	for (const name of ["cmrv", "cmrh", "review-v", "review-h"]) {
+		assert.equal(h.commands.has(name), false, `${name} is no longer bundled`);
+	}
 	const tool = h.tools.get("cmux_start_pi");
 	assert.equal(tool.parameters.properties.placement.default, "workspace");
 	assert.equal(tool.parameters.properties.continueSession.default, false);
 	assert.ok(tool.promptGuidelines.some((text) => text.includes("explicitly")));
+});
+
+test("users can register former review command names as configured shortcuts", (t) => {
+	const commands = Object.fromEntries(["cmrv", "cmrh", "review-v", "review-h"].map((name) => [name, "echo own-review"]));
+	const h = harness(t, { extension: piCmuxExtension, settings: { "pi-cmux": { commands } } });
+	for (const name of Object.keys(commands)) {
+		assert.match(h.commands.get(name).description, /echo own-review/);
+	}
 });
 
 test("configured shortcuts cannot replace /cmn", (t) => {

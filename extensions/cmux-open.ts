@@ -48,10 +48,6 @@ const RESERVED_COMMAND_NAMES = new Set([
 	"cmzh",
 	"z",
 	"zh",
-	"cmrv",
-	"cmrh",
-	"review-v",
-	"review-h",
 	"cmcv",
 	"cmch",
 ]);

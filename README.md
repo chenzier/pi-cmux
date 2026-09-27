@@ -10,7 +10,7 @@ Pi package with [cmux](https://www.cmux.dev)-powered terminal integrations for [
 
 ## What it adds
 
-`pi-cmux` keeps Pi terminal-native by delegating notifications, sidebar status, pane splits, tab naming, pluggable tool commands, directory jumps, review handoff, and continuation workflows to cmux.
+`pi-cmux` keeps Pi terminal-native by delegating notifications, sidebar status, pane splits, tab naming, pluggable tool commands, directory jumps, and continuation workflows to cmux.
 
 ## Install
 
@@ -51,7 +51,6 @@ If Pi is already running:
 | Jump directory | `/cmz <query>`, `/cmzh <query>` | Resolves a zoxide match or path, then opens Pi there. |
 | Continue task | `/cmcv [note]`, `/cmch [note]` | Opens a related handoff session in a split. |
 | Continue in worktree | `/cmcv -c <branch> [--from <ref>] [note]` | Creates a branch worktree and starts Pi there with handoff context. |
-| Review in split | `/cmrv [flags] [target]`, `/cmrh [flags] [target]` | Starts a focused review session in a split. |
 
 New Pi sessions and tool terminals preserve the calling Pi process's `PATH`, so executables such as Pi, Node, and Hunk remain discoverable even when cmux has a different terminal environment. Tool commands use `/bin/sh -c` without loading login profiles. This does not copy shell aliases or functions.
 
@@ -66,8 +65,6 @@ Detailed command examples: [docs/usage.md](docs/usage.md).
 /cmz mono
 /cmcv focus on tests
 /cmcv -c fix/sidebar --from main
-/cmrv --bugs src/auth.ts
-/cmrv https://github.com/owner/repo/pull/123
 ```
 
 ## Configuration
@@ -110,9 +107,9 @@ cmux workspace/surface targeting uses `CMUX_WORKSPACE_ID` and `CMUX_SURFACE_ID` 
 
 ## Bundled resources
 
-Extensions: `cmux-notify`, `cmux-sidebar`, `cmux-split`, `cmux-open`, `cmux-zoxide`, `cmux-review`, `cmux-continue`.
+Extensions: `cmux-notify`, `cmux-sidebar`, `cmux-split`, `cmux-open`, `cmux-zoxide`, `cmux-start`, `cmux-continue`.
 
-`pi-cmux` intentionally does not bundle generic review skills or prompt templates, so packages that provide `/review`, `/review-diff`, or `code-review` can own those names without conflicts.
+`pi-cmux` does not provide review commands, skills, or prompt templates. Use your preferred review tooling in a new chat or split.
 
 ## Development
 

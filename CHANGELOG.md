@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [0.1.22] - 2026-09-27
+
+### Removed
+
+- Removed `/cmrv`, `/cmrh`, `/review-v`, and `/review-h` and the built-in review prompts and skill. Review using a regular Pi chat or split with your preferred tooling; former command names are available for configured shortcuts.
+
 ## [0.1.21] - 2026-09-27
 
 ### Added
