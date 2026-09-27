@@ -1,6 +1,7 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import cmuxNotifyExtension from "./cmux-notify.ts";
 import cmuxSplitExtension from "./cmux-split.ts";
+import cmuxStartExtension from "./cmux-start.ts";
 import cmuxZoxideExtension from "./cmux-zoxide.ts";
 import cmuxReviewExtension from "./cmux-review.ts";
 import cmuxContinueExtension from "./cmux-continue.ts";
@@ -12,6 +13,7 @@ export default function piCmuxExtensionBundle(pi: ExtensionAPI) {
 	initI18n(pi);
 	cmuxNotifyExtension(pi);
 	cmuxSplitExtension(pi);
+	cmuxStartExtension(pi);
 	cmuxZoxideExtension(pi);
 	cmuxReviewExtension(pi);
 	cmuxContinueExtension(pi);

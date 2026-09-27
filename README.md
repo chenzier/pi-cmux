@@ -44,6 +44,7 @@ If Pi is already running:
 |---|---|---|
 | Notifications | automatic | Sends `cmux notify` once Pi settles after retries, compaction, and queued follow-ups. |
 | Sidebar status/log | automatic | Updates cmux status, progress, and logs while Pi runs, then flashes once Pi settles. |
+| New sidebar chat | `/cmn <prompt>` | Starts a fresh Pi chat in a named workspace in the left sidebar. |
 | Split Pi | `/cmv [prompt]`, `/cmh [prompt]` | Opens a new right/lower split with Pi in the same project. |
 | Run a tool | `/cmo <cmd>`, `/cmoh <cmd>`, `/cmt <cmd>` | Opens a split or tab and runs a shell command in the same project. |
 | Pluggable tools | custom `/<name>` | Registers cmux split shortcuts from `pi-cmux.commands` settings. |

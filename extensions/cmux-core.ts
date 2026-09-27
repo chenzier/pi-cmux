@@ -21,12 +21,14 @@ export interface PiCommandOptions {
 }
 
 interface CmuxCallerInfo {
+	window_ref?: string;
 	workspace_ref?: string;
 	pane_ref?: string;
 	surface_ref?: string;
 }
 
 interface CmuxCallerContext {
+	window_ref?: string;
 	workspace_ref: string;
 	surface_ref: string;
 	pane_ref?: string;
@@ -226,6 +228,7 @@ async function getCallerInfo(pi: ExtensionAPI): Promise<{ ok: true; caller: Cmux
 	return {
 		ok: true,
 		caller: {
+			window_ref: parsed?.caller?.window_ref,
 			workspace_ref: workspaceRef,
 			surface_ref: surfaceRef,
 			pane_ref: parsed?.caller?.pane_ref,
@@ -324,6 +327,50 @@ async function respawnSurface(
 	}
 
 	return { ok: true };
+}
+
+export async function openCommandInNewWorkspace(
+	pi: ExtensionAPI,
+	cwd: string,
+	command: string,
+	options: { title: string; focus?: boolean },
+): Promise<{ ok: true; workspaceRef?: string } | { ok: false; error: string }> {
+	const callerResult = await getCallerInfo(pi);
+	if (!callerResult.ok) return callerResult;
+	const windowRef = callerResult.caller.window_ref;
+	if (typeof windowRef !== "string" || !windowRef.trim()) {
+		return { ok: false, error: "Could not identify the calling cmux window safely" };
+	}
+
+	// Do not pass --command here: some cmux versions type it into an interactive
+	// shell. Respawn only the returned workspace's surface, like splits and tabs.
+	const result = await execCmux(pi, [
+		"--json", "new-workspace",
+		"--window", windowRef,
+		"--cwd", cwd,
+		"--name", formatTabTitle(options.title, "Pi"),
+		"--focus", String(options.focus ?? true),
+	]);
+	if (!result.ok) {
+		return { ok: false, error: result.error || "Failed to create cmux workspace" };
+	}
+
+	const parsed = parseJson<{ workspace_ref?: unknown; workspace_id?: unknown }>(result.stdout);
+	const workspaceRef = [parsed?.workspace_ref, parsed?.workspace_id]
+		.find((value): value is string => typeof value === "string" && Boolean(value.trim()))?.trim();
+	if (!workspaceRef || workspaceRef === callerResult.caller.workspace_ref) {
+		return { ok: false, error: "Created workspace, but could not identify the new cmux workspace safely" };
+	}
+	const surfaceRef = getCreatedSurfaceRef(result.stdout) ?? await waitForNewSurface(pi, workspaceRef, []);
+	if (!surfaceRef || surfaceRef === callerResult.caller.surface_ref) {
+		return { ok: false, error: "Created workspace, but could not identify its new cmux surface safely" };
+	}
+
+	await delay(SURFACE_BOOT_DELAY_MS);
+	const respawnResult = await respawnSurface(pi, workspaceRef, surfaceRef, command, "Failed to start Pi in the new workspace");
+	if (!respawnResult.ok) return respawnResult;
+	await renameSurfaceTab(pi, workspaceRef, surfaceRef, options.title);
+	return { ok: true, workspaceRef };
 }
 
 export async function openCommandInNewSplit(

@@ -2,6 +2,20 @@
 
 ## [Unreleased]
 
+## [0.1.21] - 2026-09-27
+
+### Added
+
+- Added `/cmn <prompt>` to start a fresh Pi chat in a task-named workspace in the left sidebar, without flags.
+- Added the agent-facing `cmux_start_pi` tool for user-requested fresh chats and handoffs, defaulting to sidebar workspaces with optional split/tab placement, model settings, titles, background opening, and new-worktree handoffs. Existing split shortcuts remain unchanged.
+- Target new workspaces through the caller's window and returned workspace/surface IDs, rejecting ambiguous discovery instead of launching in the selected terminal.
+- Added workspace, command, tool-registration, and handoff regression tests using stubbed cmux calls and the installed Pi session manager and CLI parser.
+
+### Fixed
+
+- Persist summary-only and user-only handoff sessions before launching Pi, preserving context that Pi otherwise defers writing until the first assistant response.
+- Exclude the executing tool-call batch from agent-requested handoffs so new sessions do not inherit unfinished calls.
+
 ## [0.1.20] - 2026-09-08
 
 ### Fixed
