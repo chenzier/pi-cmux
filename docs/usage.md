@@ -70,6 +70,28 @@ Project settings load after global settings. Set a project entry to `{ "disabled
 
 Malformed settings and invalid entries are ignored with a warning. Settings reload when a session starts or changes; after editing them, run `/reload` in Pi.
 
+## Conversation tab titles
+
+Automatic conversation titles are disabled by default. Enable them with `PI_CMUX_AUTOTITLE=1`, or add this to the agent-directory `settings.json` (normally `~/.pi/agent/settings.json`) or the session project's `.pi/settings.json`:
+
+```json
+{
+  "pi-cmux": {
+    "autotitle": true
+  }
+}
+```
+
+Project settings override global settings. `PI_CODING_AGENT_DIR` selects an alternative agent directory. `PI_CMUX_AUTOTITLE=0` or `1` overrides both settings files; `PI_CMUX_AUTOTITLE_DISABLED=1` always disables the feature. Run `/reload` after changing configuration. Malformed settings are ignored.
+
+After Pi successfully settles, a background request asks for a short topic title from the current session model. Set `PI_CMUX_AUTOTITLE_MODEL` to `provider/model` or an exact available model ID to use another model. An unknown model skips naming. The session's registry handles authentication and custom providers.
+
+The request sends up to four recent user/assistant text messages, each compressed to 300 characters, to that provider. It may incur additional usage charges. No tools, images, or full Pi system prompt are sent, and no child Pi session is created. Naming only runs in TUI mode with `CMUX_SURFACE_ID` or legacy `CMUX_PANEL_ID`, after cmux identifies the calling surface.
+
+Only the tab is renamed, never the workspace. A successful automatic title is stored in session metadata and restored on reload/resume without another model call. `/name` takes priority, including when naming is in flight. `/new`, `/resume`, `/fork`, and tree navigation restore the destination session/branch's naming state instead of carrying over the previous title. Clearing `/name` allows automatic naming again after the next settlement.
+
+Naming does not block lifecycle dispatch or settlement notifications. New turns, session changes, shutdown, and manual names cancel pending work; a 60-second deadline bounds the naming attempt. Late results are discarded. Provider and cmux failures stay silent and allow a later settlement to retry.
+
 ## Sidebar status/log
 
 `cmux-sidebar` updates the cmux right sidebar while Pi runs. It only activates inside a cmux workspace (`CMUX_WORKSPACE_ID` is present).

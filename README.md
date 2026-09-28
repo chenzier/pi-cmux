@@ -98,6 +98,11 @@ Detailed command examples: [docs/usage.md](docs/usage.md).
 | `PI_CMUX_SIDEBAR_TOKENS` | `1` | Include compact live cumulative session token counts in sidebar progress and summaries. |
 | `PI_CMUX_SIDEBAR_COST` | `0` | Include reported model cost alongside token counts. |
 | `PI_CMUX_SIDEBAR_LOG_TOOLS` | `0` | Set `1` to log every tool result. |
+| `PI_CMUX_AUTOTITLE` | `0` | Set `1` to enable conversation tab titles, or enable `"pi-cmux": { "autotitle": true }` in Pi settings. Project settings override global settings; this environment variable overrides both. |
+| `PI_CMUX_AUTOTITLE_DISABLED` | `0` | Set `1` to disable conversation tab titles regardless of other settings. |
+| `PI_CMUX_AUTOTITLE_MODEL` | current session model | Optional `provider/model` or exact model ID for naming. An unknown model skips naming rather than falling back. |
+
+Conversation tab titles are **opt-in**. After successful settlement, a background LLM request summarizes up to four recent text messages (300 characters each) and renames only the current cmux tab. This sends conversation excerpts to the selected model provider and may incur additional usage charges. It runs only in interactive Pi inside cmux, uses the session's provider registry, and never creates a child Pi session. `/name` takes priority; automatic titles are saved in the session so reload/resume does not repeat the request. See [conversation tab titles](docs/usage.md#conversation-tab-titles) for configuration and lifecycle behavior.
 
 Custom split shortcuts can be registered under `pi-cmux.commands`, and tool-start notifications can be enabled under `pi-cmux.notify.tools`, in `~/.pi/agent/settings.json` or `.pi/settings.json`; see [docs/usage.md](docs/usage.md#pluggable-tool-commands) and [tool notification settings](docs/usage.md#tool-notification-settings).
 

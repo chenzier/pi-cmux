@@ -9,6 +9,8 @@
 
 ### Added
 
+- Added opt-in conversation tab titles via `PI_CMUX_AUTOTITLE=1` or `pi-cmux.autotitle` in Pi settings. After successful settlement, a cancellable background request through the session model registry names the current cmux tab; no requests run outside interactive cmux sessions. Project settings override global settings, `/name` wins over in-flight requests, and titles persist across reload/resume. Naming sends compact conversation excerpts to the selected provider and may incur additional charges.
+- Added title configuration, lifecycle, cancellation, targeting, failure-retry, and transcript-bound regression tests. Reuse Pi's existing model registry API without adding a separate Pi AI dependency.
 - Added opt-in tool-start notifications via `pi-cmux.notify.tools` in agent-directory or project Pi settings. Requires an enabled notification level and an interactive cmux surface; project entries can disable global entries. Invalid settings are ignored, and settings reload on session changes.
 - Browser opening now automatically adds a compact **Annotate** toggle, initially off. Switching it off restores normal browsing and preserves drafts. Each browser has its own bridge (up to four), with serialized, mandatory confirmation in Pi and deduplicated steering-message dispatch. `/cmba` and `cmux_annotate_browser` remain available for retrying or stopping bridges. Page-side submissions remain untrusted; native Design Mode and unrelated automation are not used or controlled.
 - Added annotation lifecycle/protocol tests and a repository-only browser UI fixture with standalone mock and live-overlay modes.
