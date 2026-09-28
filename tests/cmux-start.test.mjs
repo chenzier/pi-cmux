@@ -92,8 +92,9 @@ function harness(t, options = {}) {
 
 test("bundle advertises browser, terminal, and Pi tools and registers /cmn, not /cmc", (t) => {
 	const h = harness(t, { extension: piCmuxExtension });
-	assert.deepEqual([...h.tools.keys()].sort(), ["cmux_open_browser", "cmux_open_terminal", "cmux_start_pi"]);
+	assert.deepEqual([...h.tools.keys()].sort(), ["cmux_annotate_browser", "cmux_open_browser", "cmux_open_terminal", "cmux_start_pi"]);
 	assert.ok(h.commands.has("cmb"));
+	assert.ok(h.commands.has("cmba"));
 	assert.ok(h.commands.has("cmn"));
 	assert.equal(h.commands.has("cmc"), false);
 	assert.ok(h.commands.has("cmcv"));
@@ -115,7 +116,7 @@ test("users can register former review command names as configured shortcuts", (
 	}
 });
 
-for (const [name, description] of [["cmn", /fresh Pi chat/], ["cmb", /Open a browser/]]) {
+for (const [name, description] of [["cmn", /fresh Pi chat/], ["cmb", /Open a browser/], ["cmba", /Retry browser annotations/]]) {
 	test(`configured shortcuts cannot replace /${name}`, (t) => {
 		const warnings = [];
 		t.mock.method(console, "warn", (message) => warnings.push(message));

@@ -44,6 +44,7 @@ npx pi-cmux
 | Split Pi | `/cmv [prompt]`, `/cmh [prompt]` | Opens a new right/lower split with Pi in the same project. |
 | Run a tool | `/cmo <cmd>`, `/cmoh <cmd>`, `/cmt <cmd>` | Opens a split or tab and runs a shell command in the same project. |
 | Open a browser | `/cmb [--down] [--focus] <url>` | Opens a browser beside this Pi terminal; keeps focus in Pi by default. |
+| Annotate a page | **Annotate** toggle in the browser | Added automatically, initially off. Select an element and write a note; Send requires confirmation in Pi. |
 | Pluggable tools | custom `/<name>` | Registers cmux split shortcuts from `pi-cmux.commands` settings. |
 | Jump directory | `/cmz <query>`, `/cmzh <query>` | Resolves a zoxide match or path, then opens Pi there. |
 | Continue task | `/cmcv [note]`, `/cmch [note]` | Opens a related handoff session in a split. |
@@ -101,7 +102,7 @@ Use `/ck` to open Hunk in a cmux split, add Hunk comments while reviewing, then 
 
 `pi-cmux` also exposes an agent tool so Pi can open an explicitly requested terminal command in a cmux split or tab. For example, asking "open k9s in a new tab" lets Pi open `k9s` without trying to capture the TUI through a shell command.
 
-Ask "open http://localhost:3000 beside Pi" to use the `cmux_open_browser` tool. Browser opening supports right/lower splits and absolute HTTP, HTTPS, or local file URLs. It binds the returned browser surface to the active Pi session. This is opening only: annotations, a steering bridge, and browser interaction tools are not implemented yet. See [browser usage and lifecycle](docs/usage.md#browser-splits).
+Ask "open http://localhost:3000 beside Pi" to use `cmux_open_browser`. An **Annotate** toggle appears automatically, initially off. Switch it on, select an element, write a note, and Send; Pi requires reviewing all confirmation pages before steering. Switch it off to browse normally without losing your draft. Page scripts can forge submissions, so approve only notes you recognize. See [browser usage and lifecycle](docs/usage.md#browser-splits).
 
 cmux workspace/surface targeting uses `CMUX_WORKSPACE_ID` and `CMUX_SURFACE_ID` automatically. New terminal splits and tabs use cmux's returned surface IDs; older terminal-creation responses fall back to bounded discovery that rejects ambiguous matches. Browser opening requires validated UUIDs and does not use discovery fallbacks. Sidebar integration only activates inside a cmux workspace.
 

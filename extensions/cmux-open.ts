@@ -37,6 +37,7 @@ const RESERVED_COMMAND_NAMES = new Set([
 	"help",
 	"cmn",
 	"cmb",
+	"cmba",
 	"cmv",
 	"cmux-v",
 	"cmh",

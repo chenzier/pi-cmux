@@ -138,13 +138,45 @@ The tool supports `tab`, `right`, and `down` placements. It uses the same `/bin/
 - Defaults to a right split without taking focus. `--down` opens below; `--focus` focuses the new browser. Flags precede the URL.
 - URLs must be absolute HTTP, HTTPS, or local `file://` URLs, without embedded credentials. Percent-encode spaces. Bare hostnames, filesystem paths, remote file hosts, and other URL schemes are rejected.
 - The `cmux_open_browser` agent tool accepts `url`, optional `placement` (`right` or `down`), and optional `focus` (default `false`). Use it for explicit requests such as "open http://localhost:3000 in a browser below Pi."
-- This opens a plain browser only. It does not enable native Design Mode, inject annotations, steer Pi, or expose page interaction tools. Successful opening confirms creation, not page readiness or an HTTP success response.
+- With a confirmation-capable Pi UI, opening automatically adds an **Annotate** toggle, initially off. It does not enable native Design Mode, steer Pi, or expose page-control tools. Successful opening confirms creation, not page readiness or an HTTP success response. Toggle injection runs separately and retries page readiness for up to 15 seconds; failure leaves the opened browser intact and reports how to retry without creating another split.
 
 Browser opening was tested on cmux **0.64.25**. It requires UUID-bearing caller/creation responses and the `pane.create` RPC; older versions have not been verified. Missing cmux, disabled browser support, incompatible responses, and timeouts produce errors rather than focus-based fallbacks. The extension does not enable browser support globally.
 
-The returned browser UUID is bound in memory to the current Pi session. Quit, `/reload`, and session replacement clear bindings and cancel pending calls, **but leave browser panes open**. Bindings are not restored automatically. This first stage has no background polling, browser-close watcher, or external resources; future browser actions must revalidate their target before use.
+The returned browser UUID is bound in memory to the current Pi session. Quit, `/reload`, and session replacement clear bindings and cancel pending calls, **but leave browser panes open**. Bindings are not restored automatically. In UI-capable sessions, opening starts bounded annotation polling, which revalidates the browser and source terminal before every page operation. Headless opening does not inject or poll.
 
 Creation is attempted once. If a request times out, is cancelled, or returns an invalid target, a split may already exist. Inspect cmux before retrying; the extension never closes an unverified surface or guesses a replacement.
+
+### Browser annotations
+
+The **Annotate** toggle appears automatically when `/cmb` or `cmux_open_browser` opens a browser. No extra slash command is needed. It starts **off**, so page clicks work normally. Switch it **on** to select an element and type in the small note overlay. The toggle stays visible while writing; switching it off cancels a pending submission and preserves the draft in that document. Switching back on restores it.
+
+Each browser has its own toggle and draft. Up to four annotation bridges can run per Pi session to bound background polling. Pi shows only one confirmation dialog at a time, even if several browsers submit notes.
+
+Optional recovery commands:
+
+```text
+/cmba
+/cmba surface:2
+/cmba off
+```
+
+`/cmba` retries the bridge when exactly one browser is bound; supply a surface when several are bound. `/cmba off` stops all bridges without closing browsers or clearing drafts. The `cmux_annotate_browser` tool provides the same recovery controls: `surface` selects a bound browser; `enabled: false` stops that bridge, or all bridges when `surface` is omitted. Starting/retrying a bridge does not turn its page toggle on. A fifth browser still opens normally, but needs a bridge slot freed before its toggle can be added.
+
+**Send** (or ⌘/Ctrl+Enter) queues one submission. Pi shows the complete request and page context in bounded review pages, with **Cancel** selected by default. In the terminal, use Up/Down to review every page, then Tab to select **Send to Pi** and Enter to approve. The warning and actions stay visible; resizing restarts review, and a terminal too small to show the review cannot approve. RPC clients receive small **Next page** / **Previous page** dialogs, with approval offered only on the last page. Approval dispatches a steering message and starts a new turn if Pi is idle. The entire review expires after two minutes. **×** or Escape in the browser cancels the pending note and closes the overlay, retaining the draft in that document.
+
+The bridge sends the comment, page URL (including query/fragment), title, selector hint, and up to 240 characters of selected visible text. Comments are limited to 2,000 characters and 20 lines; page URLs to 2,048 characters. It does not capture screenshots, full-page HTML, or form values. Text excerpts are omitted for form controls, editable elements, and containers containing either. Alternate line separators are normalized in the overlay and rejected in forged protocol submissions. Review the context for sensitive information before approving.
+
+**Trust boundary:** the overlay runs in the page's JavaScript world. Page scripts can inspect drafts, alter the overlay, and forge submissions. Routing markers are not authentication. Confirmation in Pi is always required, including on localhost; there is no automatic approval mode.
+
+Polling runs about every 1.5 seconds while annotating and every 5 seconds while off, after the previous poll completes, with bounded CLI calls and one pending submission per browser. It continues during confirmation so observed cancellation, navigation, or selection changes can invalidate approval. The exact submission and bound surface are rechecked immediately before dispatch. Acknowledgements are deduplicated within the active bridge; a lost acknowledgement never automatically resends a message. “Queued in Pi” means handed to Pi's message API, not that the model has finished or delivery succeeded downstream. Re-enabling starts a new bridge; old pending submissions are not replayed. A bridge accepts at most 128 submission IDs before it must be restarted.
+
+Full navigation reinjects the launcher in the new document but cannot preserve drafts from the old page. Same-document URL changes and detached or changed selections invalidate pending notes. Pi shutdown, `/reload`, session replacement, or session-tree navigation stop the bridge and cancel pending approvals. A browser creation that completes after tree navigation remains open but does not automatically start annotations; use `/cmba` explicitly to enable it. The page detects a missing heartbeat within about 20 seconds and disables Send while retaining its current draft. Heartbeat recovery restores disconnect detection without replaying expired submissions. Three consecutive verification failures stop polling. Closed or moved targets are never replaced by the focused browser.
+
+This uses an injected Shadow DOM overlay, not native Design Mode. If native Design Mode is active, annotations refuse to run rather than discard its draft. There are still no model-facing navigation/click/typing tools, no iframe annotation support, and no protection against manual navigation or unrelated automation. There is no atomic cross-process guard against navigation or cancellation in the interval after final verification and dispatch.
+
+Annotations require a loaded HTML document, Pi's interactive or dialog-capable RPC UI, and cmux's `surface.list`, `browser.eval`, and `browser.design_mode.status` RPCs (tested with cmux 0.64.25). After `/reload`, open a new browser with `/cmb` to get the toggle; old bindings are intentionally not adopted.
+
+Repository UI fixture: open `examples/browser/annotation-preview.html` as a local file URL for the standalone mock, or append `?live=1` to use the bare sample page with the automatically injected toggle. The mock never sends Pi messages.
 
 ## Pluggable tool commands
 
@@ -213,7 +245,7 @@ Supported object keys:
 - `description` — optional slash-command description
 - `disabled` — set to `true` in project settings to remove a global configured command
 
-Configured command names cannot reuse built-in Pi commands such as `/settings`, `/model`, or `/reload`, and they cannot replace `pi-cmux` commands such as `/cmn`, `/cmb`, `/cmv`, `/cmo`, `/cmz`, or `/cmcv`.
+Configured command names cannot reuse built-in Pi commands such as `/settings`, `/model`, or `/reload`, and they cannot replace `pi-cmux` commands such as `/cmn`, `/cmb`, `/cmba`, `/cmv`, `/cmo`, `/cmz`, or `/cmcv`.
 
 If the same command exists in both global and project settings, the project setting wins. After changing settings, run `/reload` in Pi.
 

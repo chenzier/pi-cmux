@@ -6,6 +6,17 @@
 
 - Notifications are now opt-in: `PI_CMUX_NOTIFY_LEVEL` defaults to `disabled` to avoid duplicating native cmux hook notifications. Set it to `all` to retain the previous default behavior, or choose `medium` or `low` for fewer alerts.
 
+### Added
+
+- Browser opening now automatically adds a compact **Annotate** toggle, initially off. Switching it off restores normal browsing and preserves drafts. Each browser has its own bridge (up to four), with serialized, mandatory confirmation in Pi and deduplicated steering-message dispatch. `/cmba` and `cmux_annotate_browser` remain available for retrying or stopping bridges. Page-side submissions remain untrusted; native Design Mode and unrelated automation are not used or controlled.
+- Added annotation lifecycle/protocol tests and a repository-only browser UI fixture with standalone mock and live-overlay modes.
+
+### Fixed
+
+- Annotation approval now uses bounded review pages with pinned terminal warnings/actions, explicit approval after all pages, and a shared two-minute deadline. Forged carriage-return and Unicode line-separator payloads are rejected.
+- Annotation heartbeat recovery re-arms disconnect detection; container selections omit excerpts containing form controls or editable content.
+- Browser opens completing after session-tree navigation no longer restart annotations on the new branch.
+
 ## [0.1.23] - 2026-09-28
 
 ### Added

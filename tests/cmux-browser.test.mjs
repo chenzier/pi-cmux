@@ -23,6 +23,10 @@ function harness(options = {}) {
 			assert.equal(command, "cmux");
 			assert.ok(execOptions.timeout > 0 && execOptions.timeout <= 10000);
 			const kind = args.includes("identify") ? "identify" : args.includes("pane.create") ? "create" : "unexpected";
+			if (kind === "unexpected" && options.other) {
+				calls.push({ args, options: execOptions, kind });
+				return options.other(args, execOptions);
+			}
 			assert.notEqual(kind, "unexpected", `Unexpected command: ${args.join(" ")}`);
 			calls.push({ args, options: execOptions, kind });
 			if (kind === "identify") {
@@ -42,7 +46,7 @@ function extensionHarness(options = {}) {
 	const tools = new Map();
 	const events = new Map();
 	const notifications = [];
-	const ctx = { sessionManager: { getSessionId: () => "session-one" }, ui: { notify: (...args) => notifications.push(args) } };
+	const ctx = { hasUI: options.hasUI ?? false, sessionManager: { getSessionId: () => "session-one" }, ui: { notify: (...args) => notifications.push(args) } };
 	Object.assign(h.pi, {
 		on: (name, handler) => events.set(name, handler),
 		registerCommand: (name, command) => commands.set(name, command),
@@ -266,8 +270,8 @@ for (const args of ["", "--down", "--tab https://example.test", `--down --down $
 
 test("registration and session lifecycle are inert until an explicit open", () => {
 	const h = extensionHarness();
-	assert.deepEqual([...h.commands.keys()], ["cmb"]);
-	assert.deepEqual([...h.tools.keys()], ["cmux_open_browser"]);
+	assert.deepEqual([...h.commands.keys()].sort(), ["cmb", "cmba"]);
+	assert.deepEqual([...h.tools.keys()].sort(), ["cmux_annotate_browser", "cmux_open_browser"]);
 	h.start();
 	h.stop();
 	assert.equal(h.calls.length, 0);
@@ -293,6 +297,52 @@ test("/cmb and model tool share opening behavior and return session binding deta
 	h.stop();
 	await assert.rejects(() => h.invoke(), /not active/);
 	assert.equal(h.callsFor("create").length, 2);
+});
+
+test("browser creation succeeds without waiting for annotation readiness, and shutdown cancels late injection", async () => {
+	const response = deferred();
+	let injectionSignal;
+	const h = extensionHarness({ hasUI: true, other: (_args, options) => { injectionSignal = options.signal; return response.promise; } });
+	h.start();
+	const opened = await h.invoke();
+	assert.equal(opened.details.surfaceId, SURFACE);
+	assert.equal(h.callsFor("create").length, 1);
+	assert.match(opened.content[0].text, /off by default/);
+	assert.equal(injectionSignal.aborted, false);
+	h.stop();
+	assert.equal(injectionSignal.aborted, true);
+	response.resolve(result({}));
+	await new Promise(setImmediate);
+	assert.equal(h.callsFor("create").length, 1, "annotation failures never retry browser creation");
+	assert.equal(h.notifications.length, 0, "late results cannot notify a replaced session");
+});
+
+for (const opener of ["command", "tool"]) {
+	test(`tree navigation invalidates late annotation startup from a pending ${opener} open`, async () => {
+		const response = deferred();
+		const h = extensionHarness({ hasUI: true, create: () => response.promise });
+		h.start();
+		const pending = opener === "command" ? h.commands.get("cmb").handler(URL, h.ctx) : h.invoke();
+		await new Promise(setImmediate);
+		assert.equal(h.callsFor("create").length, 1);
+		h.events.get("session_tree")({}, h.ctx);
+		response.resolve(result(CREATED));
+		const opened = await pending;
+		await new Promise(setImmediate);
+		assert.equal(h.calls.length, 2, "late creation must not inject or poll after navigation");
+		const text = opener === "tool" ? opened.content[0].text : h.notifications.at(-1)[0];
+		assert.match(text, /Annotations were not started/);
+		assert.match(text, /browser remains open/);
+		h.stop();
+	});
+}
+
+test("headless browser opening remains functional without injecting or polling", async () => {
+	const h = extensionHarness({ hasUI: false }); h.start();
+	const opened = await h.invoke();
+	assert.equal(h.calls.length, 2);
+	assert.match(opened.content[0].text, /confirmation-capable Pi UI/);
+	h.stop();
 });
 
 test("/cmb invalid arguments warn without invoking cmux", async () => {

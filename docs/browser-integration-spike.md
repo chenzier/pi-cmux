@@ -2,7 +2,7 @@
 
 Status: historical investigation, conducted before the browser-opening foundation was implemented. See [browser usage](usage.md#browser-splits) for current behavior.
 
-The native handoff and upstream guard proposals below record the original investigation, not the current implementation plan. The chosen direction requires no cmux changes: a future injected overlay and Pi-side coordination will replace native Design Mode. The overlay, bridge, and interaction tools are not implemented yet.
+The native handoff and upstream guard proposals below record the original investigation, not the current implementation plan. The implemented direction requires no cmux changes: an injected compact overlay and a polled submission/acknowledgement bridge replace native Design Mode. Every submission requires confirmation in Pi before steering. Model-facing page-control tools and an atomic interaction guard are not implemented; see [annotations](usage.md#browser-annotations).
 
 ## Tested baseline
 
@@ -11,7 +11,7 @@ The native handoff and upstream guard proposals below record the original invest
 - Disposable local HTML fixture; no authenticated pages, profile imports, clipboard access, or external application actions.
 - Upstream source inspected at the installed revision, not `main`.
 
-This is the initial verified baseline, **not evidence that older versions fail**. The earliest compatible release has not been established. The complete annotation bridge requires new cmux functionality, so no released minimum version can be declared for that feature yet.
+This is the initial verified baseline, **not evidence that older versions fail**. The earliest compatible release has not been established. The historical native handoff proposal below would require new cmux functionality. The injected annotation bridge instead uses existing RPCs and has also been tested on this baseline.
 
 ## Live results
 

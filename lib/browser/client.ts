@@ -60,7 +60,7 @@ function uuid(value: unknown, field: string): string {
 	return value.toLowerCase();
 }
 
-async function execJson(
+export async function execJson(
 	pi: Pick<ExtensionAPI, "exec">,
 	args: string[],
 	timeout: number,
@@ -73,6 +73,7 @@ async function execJson(
 	if (result.code !== 0) {
 		throw new Error(result.stderr.trim() || result.stdout.trim() || `cmux exited with code ${result.code}`);
 	}
+	if (result.stdout.length > 1_048_576) throw new Error("cmux JSON response is too large");
 	try {
 		return object(JSON.parse(result.stdout));
 	} catch {
