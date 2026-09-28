@@ -11,8 +11,6 @@ A [Pi](https://pi.dev) package that turns [cmux](https://www.cmux.dev) into your
 
 [Install](#install) · [Capabilities](#capabilities) · [Commands](#commands) · [Configuration](#configuration) · [Usage guide](docs/usage.md)
 
-![Pi running inside a cmux workspace](https://github.com/user-attachments/assets/27806213-60f9-4c30-84d4-4a331ea1484b)
-
 ## Capabilities
 
 - **Parallel Pi sessions.** Start a fresh chat in a named sidebar workspace or split Pi beside your current session.
@@ -21,6 +19,8 @@ A [Pi](https://pi.dev) package that turns [cmux](https://www.cmux.dev) into your
 - **Handoffs with context.** Continue a task in another split or a new branch worktree with handoff context.
 - **Quick project jumps.** Start Pi in another directory using a path or a zoxide match.
 - **Progress at a glance.** See status, progress, token counts, and logs in the cmux sidebar, with optional cost reporting and notifications.
+
+![Pi running inside a cmux workspace](https://github.com/user-attachments/assets/27806213-60f9-4c30-84d4-4a331ea1484b)
 
 ## Install
 
