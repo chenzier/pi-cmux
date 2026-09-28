@@ -111,13 +111,3 @@ Extensions: `cmux-notify`, `cmux-sidebar`, `cmux-split`, `cmux-open`, `cmux-brow
 
 `pi-cmux` does not provide review commands, skills, or prompt templates. Use your preferred review tooling in a new chat or split.
 
-## Development
-
-```bash
-npm ci --ignore-scripts
-npm run typecheck
-npm test
-npm run pack:check
-```
-
-The development Pi version and lockfile are pinned for reproducible installs. Dependabot checks for Pi updates weekly and opens pull requests; CI runs type checks, CLI argument/quoting tests, surface-targeting tests, and extension lifecycle tests on Node.js 22.19.0 and 24. Tests use the installed Pi parser and in-process stubs, without starting Pi sessions or cmux panes.
