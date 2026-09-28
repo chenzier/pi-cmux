@@ -1,12 +1,12 @@
 ![pi-cmux — connected terminal panes on a dark background](docs/images/pi-cmux-banner.png)
 
-**Your Pi sessions, tools, and browser — together in cmux.**
-
 [![CI](https://github.com/javiermolinar/pi-cmux/actions/workflows/ci.yml/badge.svg)](https://github.com/javiermolinar/pi-cmux/actions/workflows/ci.yml)
 [![npm version](https://img.shields.io/npm/v/pi-cmux.svg)](https://www.npmjs.com/package/pi-cmux)
 [![Node.js ≥22.19.0](https://img.shields.io/node/v/pi-cmux.svg)](https://www.npmjs.com/package/pi-cmux)
 [![Pi ≥0.85.1](https://img.shields.io/badge/Pi-%E2%89%A50.85.1-8b5cf6.svg)](https://pi.dev)
 [![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+
+**Your Pi sessions, tools, and browser — together in cmux.**
 
 A [Pi](https://pi.dev) package that turns [cmux](https://www.cmux.dev) into your coding workspace. Start parallel chats, run tools beside your agent, annotate browser pages, and carry a task into a fresh worktree without leaving the terminal.
 
