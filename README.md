@@ -125,26 +125,3 @@ Ask "open http://localhost:3000 beside Pi" to use `cmux_open_browser`. An **Anno
 
 cmux workspace/surface targeting uses `CMUX_WORKSPACE_ID` and `CMUX_SURFACE_ID` automatically. New terminal splits and tabs use cmux's returned surface IDs; older terminal-creation responses fall back to bounded discovery that rejects ambiguous matches. Browser opening requires validated UUIDs and does not use discovery fallbacks. A session-scoped cmux event listener removes closed browser bindings and stops their annotation bridges quietly, with retrying inventory checks to recover missed events. Sidebar integration only activates inside a cmux workspace.
 
-## Bundled resources
-
-Extensions: `cmux-notify`, `cmux-sidebar`, `cmux-split`, `cmux-open`, `cmux-browser`, `cmux-zoxide`, `cmux-start`, `cmux-continue`.
-
-`pi-cmux` does not provide review commands, skills, or prompt templates. Use your preferred review tooling in a new chat or split.
-
-## Validation
-
-```bash
-npm ci --ignore-scripts
-npm test
-npm run typecheck
-npm run pack:check
-```
-
-Normal tests/CI do not require cmux. To opt into installed-CLI contract tests:
-
-```bash
-PI_CMUX_TEST_CLI="$(command -v cmux)" node --test tests/cmux-cli-contract.test.mjs
-```
-
-Use an absolute executable path; an unset variable skips these tests. The tests route every CLI call to an isolated fake Unix socket, with synthetic IDs and an isolated home/environment. They exercise workspace creation through the actual launch function, targeting, focus, failures, legacy versus JSON output, and the respawn login-shell wrapper. They never execute the returned shell command or mutate the cmux app. These are CLI serialization/response tests, not application-side creation or focus tests. The audited baseline is cmux **0.64.25 (106)**, revision `b685a275c`; review contract changes when testing another version.
-
