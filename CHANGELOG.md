@@ -4,6 +4,7 @@
 
 ### Changed
 
+- Refresh the README with a terminal-inspired banner, compatibility badges, a capabilities list, quick navigation, and clearer setup instructions around the existing screenshot.
 - Notifications are now opt-in: `PI_CMUX_NOTIFY_LEVEL` defaults to `disabled` to avoid duplicating native cmux hook notifications. Set it to `all` to retain the previous default behavior, or choose `medium` or `low` for fewer alerts.
 
 ### Added

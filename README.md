@@ -1,18 +1,29 @@
 # pi-cmux
 
-<img width="1335" height="758" alt="Screenshot 2026-05-27 at 12 05 46" src="https://github.com/user-attachments/assets/27806213-60f9-4c30-84d4-4a331ea1484b" />
+![pi-cmux — connected terminal panes on a dark background](docs/images/pi-cmux-banner.png)
+
+**Your Pi sessions, tools, and browser — together in cmux.**
 
 [![CI](https://github.com/javiermolinar/pi-cmux/actions/workflows/ci.yml/badge.svg)](https://github.com/javiermolinar/pi-cmux/actions/workflows/ci.yml)
 [![npm version](https://img.shields.io/npm/v/pi-cmux.svg)](https://www.npmjs.com/package/pi-cmux)
+[![Node.js ≥22.19.0](https://img.shields.io/node/v/pi-cmux.svg)](https://www.npmjs.com/package/pi-cmux)
+[![Pi ≥0.85.1](https://img.shields.io/badge/Pi-%E2%89%A50.85.1-8b5cf6.svg)](https://pi.dev)
 [![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 
-Pi package with [cmux](https://www.cmux.dev)-powered terminal and browser integrations for [Pi](https://pi.dev).
+A [Pi](https://pi.dev) package that turns [cmux](https://www.cmux.dev) into your coding workspace. Start parallel chats, run tools beside your agent, annotate browser pages, and carry a task into a fresh worktree without leaving the terminal.
 
-## What it adds
+[Install](#install) · [Capabilities](#capabilities) · [Commands](#commands) · [Configuration](#configuration) · [Usage guide](docs/usage.md)
 
-`pi-cmux` keeps Pi terminal-native by delegating notifications, sidebar status, terminal and browser splits, tab naming, pluggable tool commands, directory jumps, and continuation workflows to cmux.
+![Pi running inside a cmux workspace](https://github.com/user-attachments/assets/27806213-60f9-4c30-84d4-4a331ea1484b)
 
-Recommended: run `cmux hooks pi install` for native notifications, session restore, and prompt previews;
+## Capabilities
+
+- **Parallel Pi sessions.** Start a fresh chat in a named sidebar workspace or split Pi beside your current session.
+- **Tools within reach.** Open tests, dev servers, and interactive tools in splits or tabs. Define shortcuts for commands you use often.
+- **Browser feedback.** Preview a page beside Pi, select an element, and send a note back after confirming it in Pi.
+- **Handoffs with context.** Continue a task in another split or a new branch worktree with handoff context.
+- **Quick project jumps.** Start Pi in another directory using a path or a zoxide match.
+- **Progress at a glance.** See status, progress, token counts, and logs in the cmux sidebar, with optional cost reporting and notifications.
 
 ## Install
 
@@ -33,6 +44,14 @@ Or install/update with the package installer:
 ```bash
 npx pi-cmux
 ```
+
+Run Pi inside cmux to use the integrations. For native notifications, session restore, and prompt previews, install cmux's Pi hooks:
+
+```bash
+cmux hooks pi install
+```
+
+Package notifications are opt-in to avoid duplicating native hook notifications. Directory matching with `/cmz` and `/cmzh` uses zoxide; explicit paths work without it.
 
 ## Commands
 
@@ -59,6 +78,7 @@ Detailed command examples: [docs/usage.md](docs/usage.md).
 ## Common examples
 
 ```text
+/cmn Investigate the slow startup
 /cmv Review the auth flow
 /cmo npm test
 /cmt k9s
