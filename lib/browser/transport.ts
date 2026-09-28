@@ -3,6 +3,7 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import type { BrowserBinding } from "./bindings.ts";
 import type { AnnotationAck, AnnotationConfig, AnnotationTransport } from "./annotations.ts";
 import { execJson } from "./client.ts";
+import { browserTargetPresent, isMissingBrowserWorkspace } from "./targets.ts";
 
 const TIMEOUT_MS = 4000;
 const RUNTIME = "__piCmuxAnnotationsV1";
@@ -15,7 +16,11 @@ export function annotationInstallScript(config: AnnotationConfig): string {
 
 export class CmuxAnnotationTransport implements AnnotationTransport {
 	private pi: Pick<ExtensionAPI, "exec">;
-	constructor(pi: Pick<ExtensionAPI, "exec">) { this.pi = pi; }
+	private removed?: (binding: BrowserBinding) => void;
+	constructor(pi: Pick<ExtensionAPI, "exec">, removed?: (binding: BrowserBinding) => void) {
+		this.pi = pi;
+		this.removed = removed;
+	}
 
 	private rpc(method: string, params: object, signal: AbortSignal): Promise<Record<string, unknown>> {
 		return execJson(this.pi, ["--json", "--id-format", "both", "rpc", method, JSON.stringify(params)], TIMEOUT_MS, signal);
@@ -23,16 +28,18 @@ export class CmuxAnnotationTransport implements AnnotationTransport {
 
 	/** Never infer a replacement from focus, display refs, or a moved/closed pane. */
 	private async verify(binding: BrowserBinding, signal: AbortSignal): Promise<void> {
-		const listing = await this.rpc("surface.list", { window_id: binding.windowId, workspace_id: binding.workspaceId }, signal);
-		const same = (a: unknown, b: string) => typeof a === "string" && a.toLowerCase() === b;
-		if (!same(listing.window_id, binding.windowId) || !same(listing.workspace_id, binding.workspaceId) || !Array.isArray(listing.surfaces)) {
-			throw new Error("Browser workspace changed");
+		let listing: Record<string, unknown>;
+		try {
+			listing = await this.rpc("surface.list", { window_id: binding.windowId, workspace_id: binding.workspaceId }, signal);
+		} catch (error) {
+			if (!signal.aborted && isMissingBrowserWorkspace(error)) this.removed?.(binding);
+			throw error;
 		}
-		const surfaces = listing.surfaces as Record<string, unknown>[];
-		const browser = surfaces.filter(s => s && same(s.id, binding.surfaceId));
-		const source = surfaces.filter(s => s && same(s.id, binding.sourceSurfaceId));
-		if (browser.length !== 1 || browser[0].type !== "browser" || !same(browser[0].pane_id, binding.paneId)
-			|| source.length !== 1 || source[0].type !== "terminal") throw new Error("Browser or source terminal is no longer in its bound workspace");
+		if (!browserTargetPresent(binding, listing)) {
+			if (!signal.aborted) this.removed?.(binding);
+			throw new Error("Browser or source terminal is no longer in its bound workspace");
+		}
+		const same = (a: unknown, b: string) => typeof a === "string" && a.toLowerCase() === b;
 		const mode = await this.rpc("browser.design_mode.status", { workspace_id: binding.workspaceId, surface_id: binding.surfaceId }, signal);
 		if (!same(mode.surface_id, binding.surfaceId) || !same(mode.workspace_id, binding.workspaceId) || mode.enabled !== false) {
 			throw new Error("Turn off native cmux Design Mode before using Pi annotations; native drafts are left untouched");

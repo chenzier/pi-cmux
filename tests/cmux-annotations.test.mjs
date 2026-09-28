@@ -169,6 +169,9 @@ test("three transport failures stop polling without closing the browser", async 
 	await h.step(); await h.step(); await h.step();
 	const count = h.calls.length; await h.step();
 	assert.equal(h.calls.length, count); assert.equal(h.notifications.length, 1);
+	assert.match(h.notifications[0][0], /surface:2.*target unavailable/);
+	assert.match(h.notifications[0][0], /If the browser is still open/);
+	assert.doesNotMatch(h.notifications[0][0], /Drafts remain/);
 	assert.ok(h.calls.every(c => c.kind !== "disconnect"));
 });
 test("explicit disable aborts confirmation and disconnects only its own overlay", async t => {
@@ -398,7 +401,7 @@ test(`${opener} opening automatically adds an off-by-default toggle; Send still 
 		registerCommand(name, command) { commands.set(name, command); },
 		sendUserMessage(...args) { sent.push(args); },
 	});
-	cmuxBrowserExtension(h.pi);
+	cmuxBrowserExtension(h.pi, () => ({ track() {}, forget() {}, stop() {} }));
 	events.get("session_start")({}, ctx);
 	t.after(() => events.get("session_shutdown")({}, ctx));
 	const invoke = (name, params) => tools.get(name).execute("call", params, undefined, undefined, ctx);

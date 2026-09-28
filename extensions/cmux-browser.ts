@@ -3,6 +3,7 @@ import { BrowserBindings, type BrowserBinding } from "../lib/browser/bindings.ts
 import { normalizeBrowserOptions, type BrowserOpenOptions } from "../lib/browser/client.ts";
 import { AnnotationManager } from "../lib/browser/annotation-manager.ts";
 import { CmuxAnnotationTransport } from "../lib/browser/transport.ts";
+import { BrowserLifecycle } from "../lib/browser/lifecycle.ts";
 
 const USAGE = "Usage: /cmb [--down] [--focus] <url>";
 const PARAMETERS = {
@@ -36,19 +37,36 @@ export function parseBrowserCommand(args: string): BrowserOpenOptions {
 	return normalizeBrowserOptions({ url: tokens[0], placement, focus });
 }
 
-export default function cmuxBrowserExtension(pi: ExtensionAPI) {
+type LifecycleFactory = (pi: ExtensionAPI, removed: (binding: BrowserBinding) => void) => Pick<BrowserLifecycle, "track" | "forget" | "stop">;
+
+export default function cmuxBrowserExtension(
+	pi: ExtensionAPI,
+	createLifecycle: LifecycleFactory = (api, removed) => new BrowserLifecycle(api, removed),
+) {
 	const bindings = new BrowserBindings();
-	const annotations = new AnnotationManager(pi, new CmuxAnnotationTransport(pi));
+	const removed = (binding: BrowserBinding) => {
+		if (!bindings.remove(binding)) return;
+		annotations.forget(binding.surfaceId);
+		lifecycle.forget(binding);
+	};
+	const lifecycle = createLifecycle(pi, removed);
+	const annotations = new AnnotationManager(pi, new CmuxAnnotationTransport(pi, removed));
 	let annotationGeneration = 0;
 	const stopAnnotations = () => { annotationGeneration++; annotations.stop(); };
 	pi.on("session_start", (_event, ctx) => {
 		stopAnnotations();
+		lifecycle.stop();
 		bindings.start(ctx.sessionManager.getSessionId());
 	});
-	pi.on("session_shutdown", () => { stopAnnotations(); bindings.stop(); });
+	pi.on("session_shutdown", () => { stopAnnotations(); lifecycle.stop(); bindings.stop(); });
 	pi.on("session_tree", stopAnnotations);
 
 	const prepareAnnotations = (binding: BrowserBinding, ctx: ExtensionContext, generation: number): string => {
+		// Session teardown can run after open() binds but before its caller resumes.
+		if (!bindings.list(binding.sessionId).includes(binding)) {
+			throw new Error(`Browser ${binding.surfaceRef ?? binding.surfaceId} was opened but is no longer bound because the Pi session ended or changed. The browser remains open.`);
+		}
+		lifecycle.track(binding);
 		if (generation !== annotationGeneration) return "Annotations were not started because Pi navigated or changed sessions while opening. The browser remains open; use /cmba to enable its bridge explicitly.";
 		if (!ctx.hasUI) return "Annotations require a confirmation-capable Pi UI.";
 		// Creation has already succeeded. Injection failures must not invite duplicate opens.

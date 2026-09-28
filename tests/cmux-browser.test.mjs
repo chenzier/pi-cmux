@@ -52,9 +52,12 @@ function extensionHarness(options = {}) {
 		registerCommand: (name, command) => commands.set(name, command),
 		registerTool: (tool) => tools.set(tool.name, tool),
 	});
-	cmuxBrowserExtension(h.pi);
+	const tracked = [];
+	let removed;
+	const lifecycle = { track: binding => tracked.push(binding), forget() {}, stop() { tracked.length = 0; } };
+	cmuxBrowserExtension(h.pi, (_pi, onRemoved) => { removed = onRemoved; return lifecycle; });
 	return {
-		...h, commands, tools, events, notifications, ctx,
+		...h, commands, tools, events, notifications, ctx, tracked, closed: binding => removed(binding),
 		start: () => events.get("session_start")({ type: "session_start", reason: "startup" }, ctx),
 		stop: () => events.get("session_shutdown")({ type: "session_shutdown", reason: "quit" }, ctx),
 		invoke: (params = { url: URL }, signal) => tools.get("cmux_open_browser").execute("open", params, signal, undefined, ctx),
@@ -211,6 +214,26 @@ test("bindings are session-scoped, immutable, and cleared without closing the br
 	assert.ok(h.calls.every((call) => call.options.signal.aborted));
 });
 
+test("closed browser bindings cannot be retried or silently adopted", async () => {
+	const h = extensionHarness(); h.start(); await h.invoke();
+	const binding = h.tracked[0];
+	assert.equal(binding.surfaceId, SURFACE);
+	h.closed(binding);
+	await assert.rejects(() => h.tools.get("cmux_annotate_browser").execute("retry", {surface: SURFACE}, undefined, undefined, h.ctx), /Specify one browser/);
+	assert.equal(h.notifications.length, 0, "normal closure is quiet");
+	h.stop();
+});
+
+test("a stale removal cannot erase a new session's binding with the same UUID", async () => {
+	const h = harness(), bindings = new BrowserBindings();
+	bindings.start("one"); const old = await bindings.open(h.pi, "one", {url: URL});
+	bindings.start("one"); const current = await bindings.open(h.pi, "one", {url: URL});
+	assert.equal(bindings.remove(old), false);
+	assert.deepEqual(bindings.list("one"), [current]);
+	assert.equal(bindings.remove(current), true);
+	assert.deepEqual(bindings.list("one"), []);
+});
+
 test("failed opens do not create bindings", async () => {
 	const h = harness({ createResult: result({ ...CREATED, workspace_id: OTHER }) });
 	const bindings = new BrowserBindings();
@@ -318,6 +341,32 @@ test("browser creation succeeds without waiting for annotation readiness, and sh
 });
 
 for (const opener of ["command", "tool"]) {
+	for (const teardown of ["shutdown", "reload", "switch"]) {
+		test(`${teardown} between binding and ${opener} continuation cannot restart lifecycle tracking`, async t => {
+			const h = extensionHarness({ hasUI: true });
+			t.after(h.stop);
+			h.start();
+			const open = BrowserBindings.prototype.open;
+			t.mock.method(BrowserBindings.prototype, "open", async function (...args) {
+				const binding = await open.apply(this, args);
+				assert.ok(this.list(binding.sessionId).includes(binding), "creation already bound its result");
+				if (teardown === "shutdown") h.stop();
+				else {
+					if (teardown === "switch") h.ctx.sessionManager.getSessionId = () => "session-two";
+					h.start();
+				}
+				return binding;
+			});
+			if (opener === "tool") await assert.rejects(() => h.invoke(), /no longer bound.*session ended or changed/);
+			else {
+				await h.commands.get("cmb").handler(URL, h.ctx);
+				assert.match(h.notifications.at(-1)[0], /no longer bound.*session ended or changed/);
+			}
+			assert.deepEqual(h.tracked, [], "no obsolete binding may revive a stopped listener");
+			assert.equal(h.calls.length, 2, "no annotation injection after session teardown");
+		});
+	}
+
 	test(`tree navigation invalidates late annotation startup from a pending ${opener} open`, async () => {
 		const response = deferred();
 		const h = extensionHarness({ hasUI: true, create: () => response.promise });
@@ -330,6 +379,7 @@ for (const opener of ["command", "tool"]) {
 		const opened = await pending;
 		await new Promise(setImmediate);
 		assert.equal(h.calls.length, 2, "late creation must not inject or poll after navigation");
+		assert.equal(h.tracked.length, 1, "tree navigation must still track a current session's browser");
 		const text = opener === "tool" ? opened.content[0].text : h.notifications.at(-1)[0];
 		assert.match(text, /Annotations were not started/);
 		assert.match(text, /browser remains open/);

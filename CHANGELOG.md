@@ -13,11 +13,12 @@
 
 ### Fixed
 
+- Browser closure now cancels pending annotation approvals and removes stale bindings quietly through a session-scoped cmux event listener. Initial/reconnect inventory checks retry with bounded backoff, and annotation target checks also cover missed events. Malformed surface types remain verification errors rather than removing bindings; other verification failures report their reason instead of claiming drafts remain in a closed page.
 - Create sidebar workspaces with `cmux --json workspace create`: cmux 0.64.25's legacy `new-workspace` ignores `--json`, leaving a workspace open without launching Pi. Preserve caller-window targeting, focus, and fail-closed handling without automatic creation retries. Added regression tests and opt-in installed-CLI contract tests against an isolated fake socket.
 - Correct the no-login-profile guarantee: cmux 0.64.25 wraps `respawn-pane` commands in `/bin/sh -lc`. The command prefix restores the caller's `PATH`, but cannot prevent login-profile side effects. Launch semantics are unchanged.
 - Annotation approval uses a compact note preview and Cancel / Send to Pi, defaulting to Cancel, instead of a full-screen paginated review. Explicit approval, cancellation, target revalidation, and the two-minute deadline remain required. Forged carriage-return and Unicode line-separator payloads are rejected.
 - Annotation heartbeat recovery re-arms disconnect detection; container selections omit excerpts containing form controls or editable content.
-- Browser opens completing after session-tree navigation no longer restart annotations on the new branch.
+- Browser opens completing after session-tree navigation no longer restart annotations on the new branch. Late open continuations after shutdown or session replacement cannot restart lifecycle listeners.
 
 ## [0.1.23] - 2026-09-28
 

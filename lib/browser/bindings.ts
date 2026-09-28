@@ -29,6 +29,11 @@ export class BrowserBindings {
 		return this.session?.id === sessionId ? [...this.session.bindings.values()] : [];
 	}
 
+	remove(binding: BrowserBinding): boolean {
+		if (this.session?.id !== binding.sessionId || this.session.bindings.get(binding.surfaceId) !== binding) return false;
+		return this.session.bindings.delete(binding.surfaceId);
+	}
+
 	async open(
 		pi: Pick<ExtensionAPI, "exec">,
 		sessionId: string,

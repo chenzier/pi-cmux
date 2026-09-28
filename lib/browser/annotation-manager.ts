@@ -59,6 +59,15 @@ export class AnnotationManager {
 		return entry.ready;
 	}
 
+	/** A closed/moved target needs no page-side disconnect or warning. */
+	forget(surfaceId: string): void {
+		const entry = this.entries.get(surfaceId);
+		if (!entry) return;
+		this.entries.delete(surfaceId);
+		entry.controller.abort();
+		entry.bridge.stop();
+	}
+
 	stop(): void {
 		for (const entry of this.entries.values()) {
 			entry.controller.abort();

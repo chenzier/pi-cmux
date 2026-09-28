@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { stripVTControlCharacters } from "node:util";
 import { setTimeout as delay } from "node:timers/promises";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { BrowserBinding } from "./bindings.ts";
@@ -224,13 +225,16 @@ export class AnnotationBridge {
 			});
 			this.accept(run, snapshot);
 			run.failures = 0;
-		} catch {
+		} catch (error) {
 			if (!this.current(run)) return;
 			// Never keep an approval alive across an unverified target/document.
 			this.cancelInflight(run);
 			if (++run.failures >= 3) {
 				this.stop();
-				run.ctx.ui.notify("Browser annotations stopped: the target or page could not be verified. Drafts remain in the page; re-enable with /cmba.", "warning");
+				const reason = stripVTControlCharacters(error instanceof Error ? error.message : "verification failed")
+					.replace(/[\u0000-\u001f\u007f-\u009f\u2028-\u202e\u2066-\u2069]/gu, " ").slice(0, 180);
+				const target = run.binding.surfaceRef ?? run.binding.surfaceId;
+				run.ctx.ui.notify(`Browser annotations stopped (${target}): ${reason}. If the browser is still open, retry with /cmba ${target}.`, "warning");
 				return;
 			}
 		} finally {

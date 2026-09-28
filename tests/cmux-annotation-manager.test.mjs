@@ -104,6 +104,20 @@ test("stopping the session aborts active and queued dialogs without sending or f
 	assert.equal(h.confirmations.length, 1); assert.equal(h.confirmations[0].signal.aborted, true); assert.equal(h.sent.length, 0);
 });
 
+test("closed browsers cancel approval without page I/O and leave other bridges working", async t => {
+	const h = harness(t), first = binding(1), second = binding(2);
+	await h.start(first); await h.start(second);
+	h.submit(first, "First note"); h.submit(second, "Second note");
+	await h.tick(); await h.tick();
+	h.manager.forget(first.surfaceId); await flush();
+	assert.equal(h.confirmations[0].signal.aborted, true);
+	assert.deepEqual(h.disconnected, [], "never evaluate a closed browser to disconnect it");
+	assert.equal(h.confirmations.length, 2);
+	await h.decide(0, "Send to Pi"); assert.equal(h.sent.length, 0);
+	await h.decide(1, "Send to Pi"); assert.equal(h.sent.length, 1);
+	assert.match(h.sent[0][0], /Second note/);
+});
+
 test("polling is capped at four browsers and disabling one frees its slot", async t => {
 	const h = harness(t);
 	for (let i = 1; i <= 4; i++) await h.start(binding(i));
