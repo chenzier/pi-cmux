@@ -1,5 +1,3 @@
-# pi-cmux
-
 ![pi-cmux — connected terminal panes on a dark background](docs/images/pi-cmux-banner.png)
 
 **Your Pi sessions, tools, and browser — together in cmux.**
