@@ -1,5 +1,6 @@
 import type { AgentEndEvent, ExtensionAPI, ExtensionContext, ToolResultEvent } from "@earendil-works/pi-coding-agent";
 import {
+	getAgentDir,
 	isBashToolResult,
 	isEditToolResult,
 	isFindToolResult,
@@ -7,14 +8,17 @@ import {
 	isReadToolResult,
 	isWriteToolResult,
 } from "@earendil-works/pi-coding-agent";
-import { basename } from "node:path";
+import { existsSync, readFileSync } from "node:fs";
+import { basename, join } from "node:path";
 
 const DEFAULT_THRESHOLD_MS = 15000;
 const DEFAULT_DEBOUNCE_MS = 3000;
 const NOTIFY_TIMEOUT_MS = 5000;
-const DEFAULT_NOTIFY_LEVEL = "all";
+const DEFAULT_NOTIFY_LEVEL = "disabled";
 const DEFAULT_INCLUDE_ASSISTANT_RESPONSE = false;
 const ASSISTANT_RESPONSE_MAX_LENGTH = 500;
+const SETTINGS_SECTION_NAME = "pi-cmux";
+const TOOL_NOTIFICATION_SUBTITLE_PREFIX = "Tool";
 
 type NotifyLevel = "all" | "medium" | "low" | "disabled";
 
@@ -32,6 +36,119 @@ interface AssistantMessageLike {
 	stopReason?: string;
 	errorMessage?: string;
 	content?: Array<{ type?: string; text?: string }>;
+}
+
+interface ToolNotificationInput {
+	disabled?: boolean;
+}
+
+function readJsonFile(path: string): Record<string, unknown> | undefined {
+	if (!existsSync(path)) {
+		return undefined;
+	}
+
+	try {
+		const parsed = JSON.parse(readFileSync(path, "utf8")) as unknown;
+		if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+			console.warn(`[pi-cmux] Ignoring non-object settings file: ${path}`);
+			return undefined;
+		}
+		return parsed as Record<string, unknown>;
+	} catch (error) {
+		const message = error instanceof Error ? error.message : String(error);
+		console.warn(`[pi-cmux] Failed to read settings from ${path}: ${message}`);
+		return undefined;
+	}
+}
+
+function readPiCmuxNotifyTools(settingsPath: string): Record<string, unknown> {
+	const settings = readJsonFile(settingsPath);
+	const section = settings?.[SETTINGS_SECTION_NAME];
+	if (!section) {
+		return {};
+	}
+	if (typeof section !== "object" || Array.isArray(section)) {
+		console.warn(`[pi-cmux] Ignoring invalid "${SETTINGS_SECTION_NAME}" settings in ${settingsPath}`);
+		return {};
+	}
+
+	const notify = (section as { notify?: unknown }).notify;
+	if (notify === undefined) {
+		return {};
+	}
+	if (notify === null || typeof notify !== "object" || Array.isArray(notify)) {
+		console.warn(`[pi-cmux] Ignoring invalid "${SETTINGS_SECTION_NAME}.notify" settings in ${settingsPath}`);
+		return {};
+	}
+
+	const tools = (notify as { tools?: unknown }).tools;
+	if (tools === undefined) {
+		return {};
+	}
+	if (tools === null || typeof tools !== "object" || Array.isArray(tools)) {
+		console.warn(`[pi-cmux] Ignoring invalid "${SETTINGS_SECTION_NAME}.notify.tools" settings in ${settingsPath}`);
+		return {};
+	}
+
+	return tools as Record<string, unknown>;
+}
+
+function isValidToolName(value: string): boolean {
+	return /^[A-Za-z0-9_.:-]+$/.test(value);
+}
+
+function normalizeToolNotification(
+	toolName: string,
+	value: unknown,
+	settingsPath: string,
+): true | null | undefined {
+	if (!toolName || !isValidToolName(toolName)) {
+		console.warn(`[pi-cmux] Skipping invalid notify tool name "${toolName}" from ${settingsPath}`);
+		return undefined;
+	}
+
+	if (value === true) {
+		return true;
+	}
+
+	if (!value || typeof value !== "object" || Array.isArray(value)) {
+		console.warn(
+			`[pi-cmux] Skipping invalid notify tool "${toolName}" from ${settingsPath}; expected true or { "disabled": true }`,
+		);
+		return undefined;
+	}
+
+	const config = value as ToolNotificationInput;
+	if (config.disabled === true) {
+		return null;
+	}
+
+	console.warn(
+		`[pi-cmux] Skipping invalid notify tool "${toolName}" from ${settingsPath}; expected true or { "disabled": true }`,
+	);
+	return undefined;
+}
+
+function loadConfiguredNotifyTools(cwd: string): Set<string> {
+	const configuredTools = new Set<string>();
+	const settingsPaths = [join(getAgentDir(), "settings.json"), join(cwd, ".pi", "settings.json")];
+
+	for (const settingsPath of settingsPaths) {
+		const tools = readPiCmuxNotifyTools(settingsPath);
+		for (const [toolName, value] of Object.entries(tools)) {
+			const normalized = normalizeToolNotification(toolName, value, settingsPath);
+			if (normalized === null) {
+				configuredTools.delete(toolName);
+				continue;
+			}
+			if (!normalized) {
+				continue;
+			}
+			configuredTools.add(toolName);
+		}
+	}
+
+	return configuredTools;
 }
 
 function getNumberFromEnv(name: string, fallback: number): number {
@@ -62,10 +179,10 @@ function getNotifyLevelFromEnv(): NotifyLevel {
  * Headless/embedded runs (SDK, print, JSON, RPC) and plain terminals must stay
  * silent even though the cmux app (and its socket) is reachable.
  */
-function isRunningInsideCmux(ctx: ExtensionContext): boolean {
+function canNotifyInContext(ctx: ExtensionContext): boolean {
 	if (process.env.PI_CMUX_NOTIFY_FORCE === "1") return true;
 	if (ctx.mode !== "tui") return false;
-	return Boolean(process.env.CMUX_SURFACE_ID || process.env.CMUX_PANEL_ID);
+	return Boolean(process.env.CMUX_SURFACE_ID?.trim() || process.env.CMUX_PANEL_ID?.trim());
 }
 
 function pluralize(count: number, singular: string, plural: string = `${singular}s`): string {
@@ -84,6 +201,12 @@ function formatDuration(ms: number): string {
 function getPathFromInput(event: ToolResultEvent): string | undefined {
 	const path = event.input.path;
 	return typeof path === "string" && path.length > 0 ? path : undefined;
+}
+
+function getPathFromArgs(args: unknown): string | undefined {
+	if (typeof args !== "object" || args === null) return undefined;
+	const value = (args as { path?: unknown }).path;
+	return typeof value === "string" && value.length > 0 ? value : undefined;
 }
 
 function getFirstText(event: ToolResultEvent): string | undefined {
@@ -106,6 +229,11 @@ function summarizeError(event: ToolResultEvent): string {
 		return `${event.toolName} failed`;
 	}
 	return text.length > 120 ? `${text.slice(0, 117)}...` : text;
+}
+
+function summarizeToolStart(toolName: string, args: unknown): string {
+	const path = getPathFromArgs(args);
+	return path ? `Using ${toolName} on ${basename(path)}` : `Using ${toolName}`;
 }
 
 function summarizeSuccess(state: RunState, durationMs: number, thresholdMs: number): string {
@@ -240,6 +368,7 @@ export default function cmuxNotifyExtension(pi: ExtensionAPI) {
 	const notifyLevel = getNotifyLevelFromEnv();
 	const includeAssistantResponse = getBooleanFromEnv("PI_CMUX_NOTIFY_INCLUDE_RESPONSE", DEFAULT_INCLUDE_ASSISTANT_RESPONSE);
 	const title = process.env.PI_CMUX_NOTIFY_TITLE || "Pi";
+	let notifyTools = new Set<string>();
 
 	let runState = createEmptyRunState();
 	let logicalRunActive = false;
@@ -277,16 +406,32 @@ export default function cmuxNotifyExtension(pi: ExtensionAPI) {
 		return { ok: true };
 	};
 
+	pi.on("session_start", async (_event, ctx) => {
+		notifyTools = notifyLevel === "disabled" ? new Set() : loadConfiguredNotifyTools(ctx.cwd);
+	});
+
 	pi.on("agent_start", async (_event, ctx) => {
-		if (!isRunningInsideCmux(ctx)) return;
+		if (!canNotifyInContext(ctx)) return;
 		if (logicalRunActive) return;
 		logicalRunActive = true;
 		pendingCompletionMessages = undefined;
 		runState = createEmptyRunState();
 	});
 
+	pi.on("tool_execution_start", async (event, ctx) => {
+		if (!canNotifyInContext(ctx)) return;
+		if (notifyLevel === "disabled" || !notifyTools.has(event.toolName)) {
+			return;
+		}
+
+		await sendNotification(
+			`${TOOL_NOTIFICATION_SUBTITLE_PREFIX}: ${event.toolName}`,
+			summarizeToolStart(event.toolName, event.args),
+		);
+	});
+
 	pi.on("tool_result", async (event, ctx) => {
-		if (!isRunningInsideCmux(ctx)) return;
+		if (!canNotifyInContext(ctx)) return;
 		if (event.isError && !runState.firstToolError) {
 			runState.firstToolError = summarizeError(event);
 		}
@@ -318,13 +463,12 @@ export default function cmuxNotifyExtension(pi: ExtensionAPI) {
 	});
 
 	pi.on("agent_settled", async (_event, ctx) => {
-		if (!isRunningInsideCmux(ctx)) return;
+		if (!canNotifyInContext(ctx)) return;
 		if (!ctx.isIdle() || !pendingCompletionMessages) return;
 
 		const messages = pendingCompletionMessages;
 		pendingCompletionMessages = undefined;
 		logicalRunActive = false;
-
 
 		const durationMs = Date.now() - runState.startedAt;
 		const runError = summarizeRunError(messages, runState.firstToolError);

@@ -31,7 +31,6 @@ Other important files:
 ## Release / push checklist
 
 Before pushing changes:
-- bump the npm version
 - update `CHANGELOG.md` if behavior changed
 - make sure `README.md` matches the current behavior
 - review the git diff for accidental changes
