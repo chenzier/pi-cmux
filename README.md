@@ -12,6 +12,8 @@ Pi package with [cmux](https://www.cmux.dev)-powered terminal and browser integr
 
 `pi-cmux` keeps Pi terminal-native by delegating notifications, sidebar status, terminal and browser splits, tab naming, pluggable tool commands, directory jumps, and continuation workflows to cmux.
 
+Recommended: run `cmux hooks pi install` for native notifications, session restore, and prompt previews;
+
 ## Install
 
 Requires Pi **0.85.1 or newer** and Node.js **22.19.0 or newer**. The `pi` executable on your `PATH` must also meet this requirement. Update Pi if needed:
@@ -30,14 +32,6 @@ Or install/update with the package installer:
 
 ```bash
 npx pi-cmux
-```
-
-Recommended: run `cmux hooks pi install` for native notifications, session restore, and prompt previews; pi-cmux notifications are opt-in via `PI_CMUX_NOTIFY_LEVEL=all`.
-
-If Pi is already running:
-
-```text
-/reload
 ```
 
 ## Commands
