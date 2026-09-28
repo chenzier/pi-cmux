@@ -31,6 +31,45 @@ PI_CMUX_NOTIFY_LEVEL=low       # Error only
 PI_CMUX_NOTIFY_LEVEL=disabled  # off (default)
 ```
 
+### Tool notification settings
+
+Tool-start notifications are opt-in. Configure exact Pi tool names under `pi-cmux.notify.tools`:
+
+```json
+{
+  "pi-cmux": {
+    "notify": {
+      "tools": {
+        "ask_user_question": true
+      }
+    }
+  }
+}
+```
+
+Supported locations:
+- `~/.pi/agent/settings.json` for global tool notifications (or `$PI_CODING_AGENT_DIR/settings.json` when configured)
+- `.pi/settings.json` under the session's working directory for project-local tool notifications
+
+Also set `PI_CMUX_NOTIFY_LEVEL=all`, `medium`, or `low`; the default `disabled` suppresses both final-run and tool-start notifications. Configured tools notify at any enabled level, independently of the final-run severity filter. Tool-start notifications only run in interactive Pi inside a cmux surface (`CMUX_SURFACE_ID` or legacy `CMUX_PANEL_ID`); headless runs with inherited cmux variables stay silent. Notification bodies contain the tool name and, when present, the path basename—not the other tool arguments.
+
+Project settings load after global settings. Set a project entry to `{ "disabled": true }` to remove a global tool notification:
+
+```json
+{
+  "pi-cmux": {
+    "notify": {
+      "tools": {
+        "ask_user_question": { "disabled": true },
+        "read": true
+      }
+    }
+  }
+}
+```
+
+Malformed settings and invalid entries are ignored with a warning. Settings reload when a session starts or changes; after editing them, run `/reload` in Pi.
+
 ## Conversation tab titles
 
 Automatic conversation titles are disabled by default. Enable them with `PI_CMUX_AUTOTITLE=1`, or add this to the agent-directory `settings.json` (normally `~/.pi/agent/settings.json`) or the session project's `.pi/settings.json`:

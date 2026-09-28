@@ -104,7 +104,23 @@ Detailed command examples: [docs/usage.md](docs/usage.md).
 
 Conversation tab titles are **opt-in**. After successful settlement, a background LLM request summarizes up to four recent text messages (300 characters each) and renames only the current cmux tab. This sends conversation excerpts to the selected model provider and may incur additional usage charges. It runs only in interactive Pi inside cmux, uses the session's provider registry, and never creates a child Pi session. `/name` takes priority; automatic titles are saved in the session so reload/resume does not repeat the request. See [conversation tab titles](docs/usage.md#conversation-tab-titles) for configuration and lifecycle behavior.
 
-Custom split shortcuts can be registered under `pi-cmux.commands` in `~/.pi/agent/settings.json` or `.pi/settings.json`; see [docs/usage.md](docs/usage.md#pluggable-tool-commands).
+Custom split shortcuts can be registered under `pi-cmux.commands`, and tool-start notifications can be enabled under `pi-cmux.notify.tools`, in `~/.pi/agent/settings.json` or `.pi/settings.json`; see [docs/usage.md](docs/usage.md#pluggable-tool-commands) and [tool notification settings](docs/usage.md#tool-notification-settings).
+
+Example tool notification settings:
+
+```json
+{
+  "pi-cmux": {
+    "notify": {
+      "tools": {
+        "ask_user_question": true
+      }
+    }
+  }
+}
+```
+
+Set `PI_CMUX_NOTIFY_LEVEL=all`, `medium`, or `low` to enable notifications too; the default `disabled` suppresses both final-run and tool-start notifications. Configured tools notify at any enabled level, only while Pi runs interactively inside a cmux surface. Run `/reload` after changing settings.
 
 Example Hunk review shortcut:
 
