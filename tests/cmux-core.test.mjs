@@ -34,14 +34,12 @@ function captureCommand(t, buildCommand, terminalPath = "/usr/bin:/bin") {
 	for (const name of ["pi", "cmux-test-tool"]) {
 		writeFileSync(join(bin, name), '#!/usr/bin/env node\nprocess.stdout.write(JSON.stringify({ cwd: process.cwd(), args: process.argv.slice(2), path: process.env.PATH }));\n', { mode: 0o755 });
 	}
-	// Login profiles must not replace the caller PATH or run startup side effects.
-	writeFileSync(join(root, ".profile"), "printf 'unexpected login profile\\n' >&2\nexport PATH=/cmux-test-login-path\n");
-
 	const callerPath = [bin, "/usr/bin", "/bin"].join(delimiter);
 	const command = withPath(callerPath, () => buildCommand(cwd));
 
 	// cmux's app environment can have a different PATH from the invoking Pi process.
-	// Execute the real command and Node shebang without starting Pi or cmux.
+	// Test our command and Node shebang, not cmux's outer login shell.
+	// The optional installed-CLI contract test checks that wrapper without executing it.
 	const result = spawnSync("/bin/sh", ["-c", command], {
 		encoding: "utf8",
 		timeout: 10_000,

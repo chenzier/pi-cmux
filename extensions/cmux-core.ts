@@ -130,7 +130,8 @@ export function buildPiCommand(cwd: string, options?: PiCommandOptions): string 
 }
 
 export function buildShellCommand(cwd: string, command: string): string {
-	// Use the system shell without login profiles that could overwrite the caller PATH.
+	// This inner shell is non-login. cmux respawn-pane may wrap the whole command
+	// in a login shell; the prefix restores PATH, but cannot prevent profile side effects.
 	return [...buildCommandPrefix(cwd), "/bin/sh", "-c", shellEscape(command)].join(" ");
 }
 
@@ -345,7 +346,8 @@ export async function openCommandInNewWorkspace(
 	// Do not pass --command here: some cmux versions type it into an interactive
 	// shell. Respawn only the returned workspace's surface, like splits and tabs.
 	const result = await execCmux(pi, [
-		"--json", "new-workspace",
+		// The legacy new-workspace verb ignores --json on cmux 0.64.25.
+		"--json", "workspace", "create",
 		"--window", windowRef,
 		"--cwd", cwd,
 		"--name", formatTabTitle(options.title, "Pi"),

@@ -50,7 +50,9 @@ npx pi-cmux
 | Continue task | `/cmcv [note]`, `/cmch [note]` | Opens a related handoff session in a split. |
 | Continue in worktree | `/cmcv -c <branch> [--from <ref>] [note]` | Creates a branch worktree and starts Pi there with handoff context. |
 
-New Pi sessions and tool terminals preserve the calling Pi process's `PATH`, so executables such as Pi, Node, and Hunk remain discoverable even when cmux has a different terminal environment. Tool commands use `/bin/sh -c` without loading login profiles. This does not copy shell aliases or functions.
+New Pi sessions and tool terminals preserve the calling Pi process's `PATH`, so executables such as Pi, Node, and Hunk remain discoverable even when cmux has a different terminal environment. Tool commands use an inner `/bin/sh -c`, but cmux 0.64.25 wraps respawns in `/bin/sh -lc`. Login profiles may run before our command restores `PATH`; profile side effects are not prevented. This does not copy the caller's shell aliases or functions.
+
+New workspaces use `cmux --json workspace create`, verified against cmux **0.64.25 (106)**. Creation targets the caller's window and is never automatically retried; if identification or startup fails, inspect cmux before retrying because the workspace may already exist. Older cmux versions have not been verified.
 
 Detailed command examples: [docs/usage.md](docs/usage.md).
 
@@ -111,4 +113,21 @@ cmux workspace/surface targeting uses `CMUX_WORKSPACE_ID` and `CMUX_SURFACE_ID` 
 Extensions: `cmux-notify`, `cmux-sidebar`, `cmux-split`, `cmux-open`, `cmux-browser`, `cmux-zoxide`, `cmux-start`, `cmux-continue`.
 
 `pi-cmux` does not provide review commands, skills, or prompt templates. Use your preferred review tooling in a new chat or split.
+
+## Validation
+
+```bash
+npm ci --ignore-scripts
+npm test
+npm run typecheck
+npm run pack:check
+```
+
+Normal tests/CI do not require cmux. To opt into installed-CLI contract tests:
+
+```bash
+PI_CMUX_TEST_CLI="$(command -v cmux)" node --test tests/cmux-cli-contract.test.mjs
+```
+
+Use an absolute executable path; an unset variable skips these tests. The tests route every CLI call to an isolated fake Unix socket, with synthetic IDs and an isolated home/environment. They exercise workspace creation through the actual launch function, targeting, focus, failures, legacy versus JSON output, and the respawn login-shell wrapper. They never execute the returned shell command or mutate the cmux app. These are CLI serialization/response tests, not application-side creation or focus tests. The audited baseline is cmux **0.64.25 (106)**, revision `b685a275c`; review contract changes when testing another version.
 

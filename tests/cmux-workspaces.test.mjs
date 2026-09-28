@@ -6,6 +6,7 @@ const CALLER = { window_ref: "window:1", workspace_ref: "workspace:1", surface_r
 const COMMAND = "cd '/project' && exec pi -- 'Review auth'";
 const OPTIONS = { title: "Review auth · project" };
 const json = (value) => ({ stdout: JSON.stringify(value) });
+const commandName = (args) => args[1] === "workspace" ? args.slice(1, 3).join(" ") : args[0] === "--json" ? args[1] : args[0];
 
 function harness(t, options = {}) {
 	t.mock.method(globalThis, "setTimeout", (callback) => { queueMicrotask(callback); return 0; });
@@ -17,11 +18,11 @@ function harness(t, options = {}) {
 			async exec(command, args) {
 				assert.equal(command, "cmux");
 				calls.push(args);
-				const subcommand = args[0] === "--json" ? args[1] : args[0];
+				const subcommand = commandName(args);
 				let result;
 				switch (subcommand) {
 					case "identify": result = options.identify ?? json({ caller: CALLER, focused: { window_ref: "window:99" } }); break;
-					case "new-workspace": result = options.create ?? json({ workspace_ref: "workspace:2", surface_ref: "surface:2" }); break;
+					case "workspace create": result = options.create ?? json({ workspace_ref: "workspace:2", surface_ref: "surface:2" }); break;
 					case "list-panes": {
 						assert.equal(args[3], "workspace:2");
 						result = options.poll?.(++polls) ?? json({ panes: [{ ref: "pane:2", surface_refs: ["surface:2"] }] });
@@ -38,15 +39,15 @@ function harness(t, options = {}) {
 }
 
 function callsFor(h, name) {
-	return h.calls.filter((args) => (args[0] === "--json" ? args[1] : args[0]) === name);
+	return h.calls.filter((args) => commandName(args) === name);
 }
 
 for (const focus of [undefined, true, false]) {
 	test(`workspace: use caller window and returned IDs, focus=${focus}`, async (t) => {
 		const h = harness(t);
 		assert.deepEqual(await openCommandInNewWorkspace(h.pi, "/project", COMMAND, { ...OPTIONS, focus }), { ok: true, workspaceRef: "workspace:2" });
-		assert.deepEqual(callsFor(h, "new-workspace"), [[
-			"--json", "new-workspace", "--window", "window:1", "--cwd", "/project",
+		assert.deepEqual(callsFor(h, "workspace create"), [[
+			"--json", "workspace", "create", "--window", "window:1", "--cwd", "/project",
 			"--name", OPTIONS.title, "--focus", String(focus ?? true),
 		]]);
 		assert.deepEqual(callsFor(h, "respawn-pane"), [["respawn-pane", "--workspace", "workspace:2", "--surface", "surface:2", "--command", COMMAND]]);
@@ -83,14 +84,16 @@ for (const identify of [json({}), json({ caller: { ...CALLER, window_ref: undefi
 for (const create of [
 	{ code: 1, stderr: "unsupported option --name" },
 	{ killed: true, stdout: '{"workspace_ref":"workspace:2"}' },
-	{ stdout: "OK" }, json(null), json({ workspace_ref: 42 }),
+	// Actual legacy CLI output: creation succeeded, but must not be retried.
+	{ stdout: "OK workspace:7\n" }, { stdout: "OK" }, json(null), json({ workspace_ref: 42 }),
 	json({ workspace_ref: "workspace:1", surface_ref: "surface:1" }),
 	json({ workspace_ref: "workspace:2", surface_ref: "surface:1" }),
 ]) {
 	test(`workspace: fail safely without retrying creation: ${JSON.stringify(create)}`, async (t) => {
 		const h = harness(t, { create });
 		assert.equal((await openCommandInNewWorkspace(h.pi, "/project", COMMAND, OPTIONS)).ok, false);
-		assert.equal(callsFor(h, "new-workspace").length, 1);
+		assert.equal(callsFor(h, "workspace create").length, 1);
+		assert.equal(h.calls.length, 2, "stop after identify and a single creation attempt");
 		assert.equal(callsFor(h, "respawn-pane").length, 0);
 		assert.equal(callsFor(h, "rename-tab").length, 0);
 	});

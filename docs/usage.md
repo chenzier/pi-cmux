@@ -61,6 +61,12 @@ Split and tab creation uses the surface ID returned by cmux to target command st
 
 Commands that spawn a split rename the new cmux tab/surface as `<title> · <repo-or-dir>`, using the git repo basename when available and the working-directory basename otherwise. Examples: `Pi · pi-cmux`, `Review · pi-cmux`, `Continue · fix-sidebar`, `npm test · pi-cmux`.
 
+## New sidebar workspaces
+
+`/cmn <prompt>` and `cmux_start_pi` with workspace placement use `cmux --json workspace create`, verified against cmux **0.64.25 (106)**. The legacy `new-workspace` command ignores `--json` on that version. Older versions have not been verified.
+
+Creation targets the calling Pi terminal's window, not the focused window, and focuses the new workspace by default (`focus: false` keeps it in the background). Pi starts only after the returned workspace and its surface are identified safely. Creation is never automatically retried: an error may leave a workspace open without Pi. Inspect cmux before retrying.
+
 ## Split Pi sessions
 
 ```text
@@ -97,7 +103,8 @@ Legacy aliases:
 - `/cmoh` opens a split below and runs a shell command.
 - `/cmt` opens a new cmux tab and runs a shell command.
 - Commands run via `/bin/sh -c` in the current project directory, preserving the calling Pi process's `PATH`.
-- Login profiles are not loaded, and shell aliases/functions are not copied. If a command needs shell initialization, request it explicitly (for example, `/cmo zsh -lic 'my-alias'`).
+- `/bin/sh -c` is the inner shell. On cmux 0.64.25, `respawn-pane` wraps both Pi and tool launches in `/bin/sh -lc`, so login profiles may run before our command restores `PATH`. Profile side effects are not prevented.
+- The caller's shell aliases/functions are not copied. If a command needs a specific shell's initialization, request it explicitly (for example, `/cmo zsh -lic 'my-alias'`).
 
 Examples:
 
@@ -199,7 +206,7 @@ Simple form:
 }
 ```
 
-Each configured command opens a right cmux split by default and runs via `/bin/sh -c` in the current project directory, preserving the calling Pi process's `PATH` without loading login profiles.
+Each configured command opens a right cmux split by default and runs via an inner `/bin/sh -c` in the current project directory, preserving the calling Pi process's `PATH`. cmux's outer login shell may still load profiles; see [Tool splits and tabs](#tool-splits-and-tabs).
 
 Examples:
 

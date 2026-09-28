@@ -13,6 +13,8 @@
 
 ### Fixed
 
+- Create sidebar workspaces with `cmux --json workspace create`: cmux 0.64.25's legacy `new-workspace` ignores `--json`, leaving a workspace open without launching Pi. Preserve caller-window targeting, focus, and fail-closed handling without automatic creation retries. Added regression tests and opt-in installed-CLI contract tests against an isolated fake socket.
+- Correct the no-login-profile guarantee: cmux 0.64.25 wraps `respawn-pane` commands in `/bin/sh -lc`. The command prefix restores the caller's `PATH`, but cannot prevent login-profile side effects. Launch semantics are unchanged.
 - Annotation approval now uses bounded review pages with pinned terminal warnings/actions, explicit approval after all pages, and a shared two-minute deadline. Forged carriage-return and Unicode line-separator payloads are rejected.
 - Annotation heartbeat recovery re-arms disconnect detection; container selections omit excerpts containing form controls or editable content.
 - Browser opens completing after session-tree navigation no longer restart annotations on the new branch.
@@ -56,7 +58,7 @@
 ### Fixed
 
 - Preserve the calling Pi process's `PATH` when launching new Pi sessions, fixing `pi: not found` when cmux's terminal environment cannot find Pi or Node.
-- Preserve the same `PATH` for `cmux_open_terminal`, `/cmo`, `/cmov`, `/cmoh`, `/cmt`, and configured tool shortcuts, fixing `hunk: command not found` and similar failures in splits and tabs. Launch the system shell via `/bin/sh -c` without loading login profiles that could overwrite `PATH`.
+- Preserve the same `PATH` for `cmux_open_terminal`, `/cmo`, `/cmov`, `/cmoh`, `/cmt`, and configured tool shortcuts, fixing `hunk: command not found` and similar failures in splits and tabs. Launch the inner system shell via `/bin/sh -c`. Correction: cmux's outer login shell can still load profiles before the command restores `PATH` (see Unreleased).
 
 ## [0.1.18] - 2026-09-07
 

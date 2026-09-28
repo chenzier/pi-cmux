@@ -58,8 +58,10 @@ function harness(t, options = {}) {
 			let response = {};
 			if (subcommand === "identify") response = { caller: { window_ref: "window:1", workspace_ref: "workspace:1", pane_ref: "pane:1", surface_ref: "surface:1" } };
 			else if (subcommand === "list-panes") response = { panes: [{ ref: "pane:1", surface_refs: ["surface:1"] }] };
-			else if (subcommand === "new-workspace") response = { workspace_ref: "workspace:2", surface_ref: "surface:2" };
-			else if (subcommand === "new-split" || subcommand === "new-surface") response = { surface_ref: "surface:2" };
+			else if (subcommand === "workspace") {
+				assert.equal(args[2], "create");
+				response = { workspace_ref: "workspace:2", surface_ref: "surface:2" };
+			} else if (subcommand === "new-split" || subcommand === "new-surface") response = { surface_ref: "surface:2" };
 			else assert.ok(["respawn-pane", "rename-tab"].includes(subcommand), `Unexpected cmux call: ${subcommand}`);
 			return { code: 0, killed: false, stdout: JSON.stringify(response), stderr: "" };
 		},
@@ -134,7 +136,7 @@ for (const prompt of ["Review the auth flow", "--help", "--handoff", "  First li
 		assert.deepEqual(launch.args, ["--", prompt.trim()]);
 		assert.equal(launch.cwd, h.cwd);
 		assert.equal(launch.parsed.session, undefined);
-		assert.equal(h.callsFor("new-workspace").length, 1);
+		assert.equal(h.callsFor("workspace").length, 1);
 		assert.equal(h.notifications.at(-1)[1], "info");
 	});
 }
@@ -147,17 +149,17 @@ test("/cmn rejects an empty prompt without creating a workspace", async (t) => {
 });
 
 test("/cmn reports creation failures", async (t) => {
-	const h = harness(t, { fail: "new-workspace" });
+	const h = harness(t, { fail: "workspace" });
 	await h.commands.get("cmn").handler("A new task", h.ctx);
 	assert.equal(h.notifications.at(-1)[1], "error");
-	assert.match(h.notifications.at(-1)[0], /new-workspace failed/);
+	assert.match(h.notifications.at(-1)[0], /workspace failed/);
 	assert.equal(h.callsFor("respawn-pane").length, 0);
 });
 
 test("/cmn normalizes and bounds the task-derived sidebar title", async (t) => {
 	const h = harness(t);
 	await h.commands.get("cmn").handler(`  Task\n   ${"long ".repeat(40)}  `, h.ctx);
-	const args = h.callsFor("new-workspace")[0].args;
+	const args = h.callsFor("workspace")[0].args;
 	const title = args[args.indexOf("--name") + 1];
 	assert.match(title, /^Task long /);
 	assert.ok(title.length <= 48);
@@ -173,7 +175,7 @@ for (const placement of [undefined, "workspace", "right", "down", "tab"]) {
 		assert.deepEqual(launch.args, ["--provider", "openai", "--model", "example", "--thinking", "high", "--", "--help"]);
 		assert.equal(result.details.continueSession, false);
 		assert.equal(result.details.placement, placement ?? "workspace");
-		const subcommand = !placement || placement === "workspace" ? "new-workspace" : placement === "tab" ? "new-surface" : "new-split";
+		const subcommand = !placement || placement === "workspace" ? "workspace" : placement === "tab" ? "new-surface" : "new-split";
 		const args = h.callsFor(subcommand)[0].args;
 		assert.equal(args[args.indexOf("--focus") + 1], "false");
 		if (placement === "right" || placement === "down") assert.equal(args[2], placement);
@@ -210,7 +212,7 @@ test("tool does not launch after cancellation", async (t) => {
 test("tool reports cmux errors rather than a successful result", async (t) => {
 	const h = harness(t, { fail: "respawn-pane" });
 	await assert.rejects(() => h.invoke({ prompt: "Test auth" }), /respawn-pane failed/);
-	assert.equal(h.callsFor("new-workspace").length, 1);
+	assert.equal(h.callsFor("workspace").length, 1);
 });
 
 for (const previousAssistant of [false, true]) {
@@ -290,7 +292,7 @@ test("worktree handoff creates a branch and persists summary without copying dir
 	assert.match(text, /dirty.txt/);
 	assert.doesNotMatch(text, /History should not be copied/);
 	await assert.rejects(() => h.invoke({ continueSession: true, branch: "fix/login" }), /Branch already exists/);
-	assert.equal(h.callsFor("new-workspace").length, 1);
+	assert.equal(h.callsFor("workspace").length, 1);
 });
 
 test("legacy continuation commands keep their split placements", async (t) => {
@@ -299,5 +301,5 @@ test("legacy continuation commands keep their split placements", async (t) => {
 		await h.commands.get(name).handler("Focus on tests", h.ctx);
 		assert.equal(h.callsFor("new-split").at(-1).args[2], direction);
 	}
-	assert.equal(h.callsFor("new-workspace").length, 0);
+	assert.equal(h.callsFor("workspace").length, 0);
 });
