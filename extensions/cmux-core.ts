@@ -21,12 +21,14 @@ export interface PiCommandOptions {
 }
 
 interface CmuxCallerInfo {
+	window_ref?: string;
 	workspace_ref?: string;
 	pane_ref?: string;
 	surface_ref?: string;
 }
 
 interface CmuxCallerContext {
+	window_ref?: string;
 	workspace_ref: string;
 	surface_ref: string;
 	pane_ref?: string;
@@ -96,13 +98,18 @@ export function shellEscape(value: string): string {
 	return `'${value.replace(/'/g, `'\\''`)}'`;
 }
 
-export function buildPiCommand(cwd: string, options?: PiCommandOptions): string {
+function buildCommandPrefix(cwd: string): string[] {
 	const commandParts = ["cd", shellEscape(cwd), "&&"];
 	// cmux respawns from the app's environment, which may have a different PATH.
 	if (process.env.PATH !== undefined) {
 		commandParts.push(`PATH=${shellEscape(process.env.PATH)}`);
 	}
-	commandParts.push("exec", "pi");
+	commandParts.push("exec");
+	return commandParts;
+}
+
+export function buildPiCommand(cwd: string, options?: PiCommandOptions): string {
+	const commandParts = [...buildCommandPrefix(cwd), "pi"];
 	if (options?.sessionFile) {
 		commandParts.push("--session", shellEscape(options.sessionFile));
 	}
@@ -123,7 +130,9 @@ export function buildPiCommand(cwd: string, options?: PiCommandOptions): string 
 }
 
 export function buildShellCommand(cwd: string, command: string): string {
-	return ["cd", shellEscape(cwd), "&&", "exec", "sh", "-lc", shellEscape(command)].join(" ");
+	// This inner shell is non-login. cmux respawn-pane may wrap the whole command
+	// in a login shell; the prefix restores PATH, but cannot prevent profile side effects.
+	return [...buildCommandPrefix(cwd), "/bin/sh", "-c", shellEscape(command)].join(" ");
 }
 
 function normalizeTabTitle(value: string | undefined, fallback: string): string {
@@ -179,8 +188,8 @@ function collectSurfaceRefs(panes: CmuxPaneInfo[]): Set<string> {
 	return refs;
 }
 
-export async function execCmux(pi: ExtensionAPI, args: string[]): Promise<CmuxExecResult> {
-	const result = await pi.exec("cmux", args, { timeout: CMUX_TIMEOUT_MS });
+export async function execCmux(pi: ExtensionAPI, args: string[], signal?: AbortSignal): Promise<CmuxExecResult> {
+	const result = await pi.exec("cmux", args, { timeout: CMUX_TIMEOUT_MS, ...(signal ? { signal } : {}) });
 	if (result.killed) {
 		return {
 			ok: false,
@@ -204,8 +213,8 @@ export async function execCmux(pi: ExtensionAPI, args: string[]): Promise<CmuxEx
 	};
 }
 
-export async function getCallerInfo(pi: ExtensionAPI): Promise<{ ok: true; caller: CmuxCallerContext } | { ok: false; error: string }> {
-	const result = await execCmux(pi, ["--json", "identify"]);
+export async function getCallerInfo(pi: ExtensionAPI, signal?: AbortSignal): Promise<{ ok: true; caller: CmuxCallerContext } | { ok: false; error: string }> {
+	const result = await execCmux(pi, ["--json", "identify"], signal);
 	if (!result.ok) {
 		return { ok: false, error: result.error || "Failed to identify cmux caller" };
 	}
@@ -220,6 +229,7 @@ export async function getCallerInfo(pi: ExtensionAPI): Promise<{ ok: true; calle
 	return {
 		ok: true,
 		caller: {
+			window_ref: parsed?.caller?.window_ref,
 			workspace_ref: workspaceRef,
 			surface_ref: surfaceRef,
 			pane_ref: parsed?.caller?.pane_ref,
@@ -318,6 +328,51 @@ async function respawnSurface(
 	}
 
 	return { ok: true };
+}
+
+export async function openCommandInNewWorkspace(
+	pi: ExtensionAPI,
+	cwd: string,
+	command: string,
+	options: { title: string; focus?: boolean },
+): Promise<{ ok: true; workspaceRef?: string } | { ok: false; error: string }> {
+	const callerResult = await getCallerInfo(pi);
+	if (!callerResult.ok) return callerResult;
+	const windowRef = callerResult.caller.window_ref;
+	if (typeof windowRef !== "string" || !windowRef.trim()) {
+		return { ok: false, error: "Could not identify the calling cmux window safely" };
+	}
+
+	// Do not pass --command here: some cmux versions type it into an interactive
+	// shell. Respawn only the returned workspace's surface, like splits and tabs.
+	const result = await execCmux(pi, [
+		// The legacy new-workspace verb ignores --json on cmux 0.64.25.
+		"--json", "workspace", "create",
+		"--window", windowRef,
+		"--cwd", cwd,
+		"--name", formatTabTitle(options.title, "Pi"),
+		"--focus", String(options.focus ?? true),
+	]);
+	if (!result.ok) {
+		return { ok: false, error: result.error || "Failed to create cmux workspace" };
+	}
+
+	const parsed = parseJson<{ workspace_ref?: unknown; workspace_id?: unknown }>(result.stdout);
+	const workspaceRef = [parsed?.workspace_ref, parsed?.workspace_id]
+		.find((value): value is string => typeof value === "string" && Boolean(value.trim()))?.trim();
+	if (!workspaceRef || workspaceRef === callerResult.caller.workspace_ref) {
+		return { ok: false, error: "Created workspace, but could not identify the new cmux workspace safely" };
+	}
+	const surfaceRef = getCreatedSurfaceRef(result.stdout) ?? await waitForNewSurface(pi, workspaceRef, []);
+	if (!surfaceRef || surfaceRef === callerResult.caller.surface_ref) {
+		return { ok: false, error: "Created workspace, but could not identify its new cmux surface safely" };
+	}
+
+	await delay(SURFACE_BOOT_DELAY_MS);
+	const respawnResult = await respawnSurface(pi, workspaceRef, surfaceRef, command, "Failed to start Pi in the new workspace");
+	if (!respawnResult.ok) return respawnResult;
+	await renameSurfaceTab(pi, workspaceRef, surfaceRef, options.title);
+	return { ok: true, workspaceRef };
 }
 
 export async function openCommandInNewSplit(

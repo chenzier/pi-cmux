@@ -82,6 +82,44 @@ function cmuxCalls(calls, subcommand) {
 	return calls.filter((call) => call.command === "cmux" && call.args[0] === subcommand);
 }
 
+for (const [level, expectedSubtitles] of [
+	[undefined, []],
+	["", []],
+	["   ", []],
+	["invalid", []],
+	["disabled", []],
+	["all", ["Waiting", "Task Complete", "Error", "Error"]],
+	[" ALL ", ["Waiting", "Task Complete", "Error", "Error"]],
+	["medium", ["Task Complete", "Error", "Error"]],
+	["low", ["Error", "Error"]],
+]) {
+	test(`notification level ${JSON.stringify(level) ?? "unset"} respects opt-in and filtering`, async () => {
+		await withEnvironment(
+			{
+				PI_CMUX_NOTIFY_LEVEL: level,
+				PI_CMUX_NOTIFY_DEBOUNCE_MS: "0",
+				PI_CMUX_NOTIFY_THRESHOLD_MS: "999999",
+			},
+			async () => {
+				const harness = createHarness(cmuxNotifyExtension);
+				for (const [stopReason, changedFile] of [
+					["stop", false],
+					["stop", true],
+					["error", false],
+					["aborted", false],
+				]) {
+					await harness.emit("agent_start");
+					if (changedFile) await harness.emit("tool_result", editResult("/repo/changed.ts"));
+					await harness.emit("agent_end", { messages: [assistantMessage(stopReason, "Result")] });
+					await harness.emit("agent_settled");
+				}
+				const subtitles = cmuxCalls(harness.execCalls, "notify").map(({ args }) => args[args.indexOf("--subtitle") + 1]);
+				assert.deepEqual(subtitles, expectedSubtitles);
+			},
+		);
+	});
+}
+
 test("notifications wait for idle settlement and use the final low-level result", async () => {
 	await withEnvironment(
 		{
