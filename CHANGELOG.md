@@ -9,6 +9,7 @@
 
 ### Added
 
+- Added opt-in tool-start notifications via `pi-cmux.notify.tools` in agent-directory or project Pi settings. Requires an enabled notification level and an interactive cmux surface; project entries can disable global entries. Invalid settings are ignored, and settings reload on session changes.
 - Browser opening now automatically adds a compact **Annotate** toggle, initially off. Switching it off restores normal browsing and preserves drafts. Each browser has its own bridge (up to four), with serialized, mandatory confirmation in Pi and deduplicated steering-message dispatch. `/cmba` and `cmux_annotate_browser` remain available for retrying or stopping bridges. Page-side submissions remain untrusted; native Design Mode and unrelated automation are not used or controlled.
 - Added annotation lifecycle/protocol tests and a repository-only browser UI fixture with standalone mock and live-overlay modes.
 

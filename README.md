@@ -99,7 +99,23 @@ Detailed command examples: [docs/usage.md](docs/usage.md).
 | `PI_CMUX_SIDEBAR_COST` | `0` | Include reported model cost alongside token counts. |
 | `PI_CMUX_SIDEBAR_LOG_TOOLS` | `0` | Set `1` to log every tool result. |
 
-Custom split shortcuts can be registered under `pi-cmux.commands` in `~/.pi/agent/settings.json` or `.pi/settings.json`; see [docs/usage.md](docs/usage.md#pluggable-tool-commands).
+Custom split shortcuts can be registered under `pi-cmux.commands`, and tool-start notifications can be enabled under `pi-cmux.notify.tools`, in `~/.pi/agent/settings.json` or `.pi/settings.json`; see [docs/usage.md](docs/usage.md#pluggable-tool-commands) and [tool notification settings](docs/usage.md#tool-notification-settings).
+
+Example tool notification settings:
+
+```json
+{
+  "pi-cmux": {
+    "notify": {
+      "tools": {
+        "ask_user_question": true
+      }
+    }
+  }
+}
+```
+
+Set `PI_CMUX_NOTIFY_LEVEL=all`, `medium`, or `low` to enable notifications too; the default `disabled` suppresses both final-run and tool-start notifications. Configured tools notify at any enabled level, only while Pi runs interactively inside a cmux surface. Run `/reload` after changing settings.
 
 Example Hunk review shortcut:
 
@@ -124,4 +140,3 @@ Use `/ck` to open Hunk in a cmux split, add Hunk comments while reviewing, then 
 Ask "open http://localhost:3000 beside Pi" to use `cmux_open_browser`. An **Annotate** toggle appears automatically, initially off. Switch it on, select an element, write a note, and Send; Pi shows a compact note preview with Cancel / Send to Pi before steering. Switch it off to browse normally without losing your draft. Page scripts can forge submissions, so approve only notes you recognize. See [browser usage and lifecycle](docs/usage.md#browser-splits).
 
 cmux workspace/surface targeting uses `CMUX_WORKSPACE_ID` and `CMUX_SURFACE_ID` automatically. New terminal splits and tabs use cmux's returned surface IDs; older terminal-creation responses fall back to bounded discovery that rejects ambiguous matches. Browser opening requires validated UUIDs and does not use discovery fallbacks. A session-scoped cmux event listener removes closed browser bindings and stops their annotation bridges quietly, with retrying inventory checks to recover missed events. Sidebar integration only activates inside a cmux workspace.
-
