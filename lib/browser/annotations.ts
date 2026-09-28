@@ -102,7 +102,7 @@ interface Run {
 	editing: boolean;
 }
 
-export type AnnotationConfirmation = (ctx: ExtensionContext, message: string, signal: AbortSignal) => Promise<string | undefined>;
+export type AnnotationConfirmation = (ctx: ExtensionContext, comment: string, signal: AbortSignal) => Promise<string | undefined>;
 
 /** One surface's bridge. The page toggle starts off; submissions never steer without approval. */
 export class AnnotationBridge {
@@ -259,7 +259,7 @@ export class AnnotationBridge {
 			// Default to Cancel: a page-forged popup must not turn an incidental Enter into approval.
 			const choice = await this.confirmation(
 				run.ctx,
-				`Send browser annotation to Pi?\nThe page can forge annotations. Only approve a request you recognize.\n\n${message}\n\nThis starts a turn if Pi is idle, or steers the current run.`,
+				submission.annotation.comment,
 				signal,
 			);
 			if (!this.current(run) || signal.aborted) return;

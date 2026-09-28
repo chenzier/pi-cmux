@@ -22,10 +22,10 @@ export class AnnotationManager {
 		this.transport = transport;
 	}
 
-	private confirm: AnnotationConfirmation = (ctx, message, signal) => {
+	private confirm: AnnotationConfirmation = (ctx, comment, signal) => {
 		const result = this.confirmationTail.catch(() => undefined).then(() => {
 			signal.throwIfAborted();
-			return confirmAnnotation(ctx, message, signal);
+			return confirmAnnotation(ctx, comment, signal);
 		});
 		this.confirmationTail = result.catch(() => undefined);
 		return result;
