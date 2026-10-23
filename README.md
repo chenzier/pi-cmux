@@ -14,6 +14,7 @@ A [Pi](https://pi.dev) package that turns [cmux](https://www.cmux.dev) into your
 ## Capabilities
 
 - **Parallel Pi sessions.** Start a fresh chat in a named sidebar workspace or split Pi beside your current session, in the current project or another directory.
+- **Conversation orientation.** Give related reviewers a shared task marker, keep conversation labels distinct, and return to the originating tab with `/cmbk`.
 - **Tools within reach.** Open tests, dev servers, and interactive tools in splits or tabs. Define shortcuts for commands you use often.
 - **Browser feedback.** Preview a page beside Pi, select an element, and send a note back after confirming it in Pi.
 - **Handoffs with context.** Continue a task in another split or a new branch worktree with handoff context.
@@ -63,6 +64,7 @@ Package notifications are opt-in to avoid duplicating native hook notifications.
 | Annotate a page | **Annotate** toggle in the browser | Added automatically, initially off. Select an element and write a note; Send requires confirmation in Pi. |
 | Pluggable tools | custom `/<name>` | Registers cmux split shortcuts from `pi-cmux.commands` settings. |
 | Jump directory | `/cmz <query>`, `/cmzh <query>` | Resolves a zoxide match or path, then opens Pi there. |
+| Return to origin | `/cmbk`, **Ctrl+Alt+B** | Returns to the exact originating conversation tab, including after workspace/window moves. |
 | Continue task | `/cmcv [note]`, `/cmch [note]` | Opens a related handoff session in a split. |
 | Continue in worktree | `/cmcv -c <branch> [--from <ref>] [note]` | Creates a branch worktree and starts Pi there with handoff context. |
 
@@ -100,13 +102,14 @@ Detailed command examples: [docs/usage.md](docs/usage.md).
 | `PI_CMUX_SIDEBAR_TOKENS` | `1` | Include compact live cumulative session token counts: on the status in minimal mode, or progress and summaries in detailed mode. |
 | `PI_CMUX_SIDEBAR_COST` | `0` | Include reported model cost alongside token counts. |
 | `PI_CMUX_SIDEBAR_LOG_TOOLS` | `0` | Set `1` to log every tool result. |
-| `PI_CMUX_AUTOTITLE` | `0` | Set `1` to enable conversation tab titles, or enable `"pi-cmux": { "autotitle": true }` in Pi settings. Project settings override global settings; this environment variable overrides both. |
-| `PI_CMUX_AUTOTITLE_DISABLED` | `0` | Set `1` to disable conversation tab titles regardless of other settings. |
+| `PI_CMUX_RETURN_KEY` | `ctrl+alt+b` | Return-to-origin shortcut; set another key such as `ctrl+shift+y`, or `off` to keep only `/cmbk`. |
+| `PI_CMUX_AUTOTITLE` | `0` | Set `1` to enable LLM-generated topic titles, or enable `"pi-cmux": { "autotitle": true }` in Pi settings. Project settings override global settings; this environment variable overrides both. |
+| `PI_CMUX_AUTOTITLE_DISABLED` | `0` | Set `1` to disable LLM-generated topics regardless of other settings; stable orientation markers remain. |
 | `PI_CMUX_AUTOTITLE_MODEL` | current session model | Optional `provider/model` or exact model ID for naming. An unknown model skips naming rather than falling back. |
 
 For a quieter sidebar, set `export PI_CMUX_SIDEBAR_MODE=minimal` before starting Pi. Minimal mode suppresses all package logs and progress even if their individual flags are enabled. Tokens appear on the existing status line; set `PI_CMUX_SIDEBAR_TOKENS=0` to hide them. Cost remains opt-in via `PI_CMUX_SIDEBAR_COST=1`. It does not remove existing logs or hide cmux's native message previews, activity, branch, or path. See [sidebar modes](docs/usage.md#sidebar-statuslog).
 
-Conversation tab titles are **opt-in**. After successful settlement, a background LLM request summarizes up to four recent text messages (300 characters each) and renames only the current cmux tab. This sends conversation excerpts to the selected model provider and may incur additional usage charges. It runs only in interactive Pi inside cmux, uses the session's provider registry, and never creates a child Pi session. `/name` takes priority; automatic titles are saved in the session so reload/resume does not repeat the request. See [conversation tab titles](docs/usage.md#conversation-tab-titles) for configuration and lifecycle behavior.
+LLM-generated topic titles are **opt-in**; stable orientation markers do not use an LLM. After successful settlement, a background LLM request summarizes up to four recent text messages (300 characters each) and renames only the current cmux tab. This sends conversation excerpts to the selected model provider and may incur additional usage charges. It runs only in interactive Pi inside cmux, uses the session's provider registry, and never creates a child Pi session. `/name` takes priority; automatic titles are saved in the session so reload/resume does not repeat the request. See [conversation tab titles](docs/usage.md#conversation-tab-titles) for configuration and lifecycle behavior.
 
 Custom split shortcuts can be registered under `pi-cmux.commands`, and tool-start notifications can be enabled under `pi-cmux.notify.tools`, in `~/.pi/agent/settings.json` or `.pi/settings.json`; see [docs/usage.md](docs/usage.md#pluggable-tool-commands) and [tool notification settings](docs/usage.md#tool-notification-settings).
 
@@ -147,6 +150,8 @@ Use `/ck` to open Hunk in a cmux split, add Hunk comments while reviewing, then 
 `pi-cmux` also exposes an agent tool so Pi can open an explicitly requested terminal command in a cmux split or tab. For example, asking "open k9s in a new tab" lets Pi open `k9s` without trying to capture the TUI through a shell command.
 
 Ask "start a fresh Pi session in a right split in ~/src/other-repo" to use `cmux_start_pi` with `cwd`. The optional path accepts absolute paths, paths relative to the current session, and `~/…`; it must be an existing directory. Omit it to keep the current directory. `cwd` cannot be combined with `continueSession: true`; handoffs keep the source directory or use the new branch worktree.
+
+For a reviewer of the current task, ask Pi to use `cmux_start_pi` with `role: "review"`; for other same-task chats, use `related: true`. These share a stable task marker **without copying history**. Ordinary fresh chats remain separate groups; handoffs share their source's group. Interactive cmux tabs put the topic first: `<topic> · <role> [<task-tag>]`, for example `Check login · review [ab12]`. The shared task tag uses four characters; detailed conversation markers stay in Pi status and metadata. Pi shows the immediate origin with `/cmbk`. Manual `/name` and optional automatic topics preserve the role and task tag. Handoffs and related chats show a model-readable origin link and return hint at their first normal turn, and the launch tool tells Pi to include that navigation help in its confirmation. Native links select the tab; `/cmbk` additionally validates the live Pi conversation. This requires UUID-bearing cmux APIs, tested with **0.65.2**. See [orientation behavior and limits](docs/usage.md#conversation-orientation).
 
 Ask "open http://localhost:3000 beside Pi" to use `cmux_open_browser`. An **Annotate** toggle appears automatically, initially off. Switch it on, select an element, write a note, and Send; Pi shows a compact note preview with Cancel / Send to Pi before steering. Switch it off to browse normally without losing your draft. Page scripts can forge submissions, so approve only notes you recognize. See [browser usage and lifecycle](docs/usage.md#browser-splits).
 

@@ -42,6 +42,7 @@ function harness(t, options = {}) {
 	const pi = {
 		on() {},
 		registerCommand(name, command) { commands.set(name, command); },
+		registerShortcut() {},
 		registerTool(tool) { tools.set(tool.name, tool); },
 		async exec(command, args, execOptions) {
 			calls.push({ command, args, options: execOptions });
@@ -121,7 +122,7 @@ test("users can register former review command names as configured shortcuts", (
 	}
 });
 
-for (const [name, description] of [["cmn", /fresh Pi chat/], ["cmb", /Open a browser/], ["cmba", /Retry browser annotations/]]) {
+for (const [name, description] of [["cmn", /fresh Pi chat/], ["cmb", /Open a browser/], ["cmba", /Retry browser annotations/], ["cmbk", /Return to the originating Pi conversation/]]) {
 	test(`configured shortcuts cannot replace /${name}`, (t) => {
 		const warnings = [];
 		t.mock.method(console, "warn", (message) => warnings.push(message));
@@ -130,6 +131,19 @@ for (const [name, description] of [["cmn", /fresh Pi chat/], ["cmb", /Open a bro
 		assert.ok(warnings.some((warning) => warning.includes(`/${name}: command already exists`)));
 	});
 }
+
+test("configured /cmbk cannot replace return navigation when the shortcut is disabled", async (t) => {
+	const previousKey = process.env.PI_CMUX_RETURN_KEY;
+	process.env.PI_CMUX_RETURN_KEY = "off";
+	t.after(() => { if (previousKey === undefined) delete process.env.PI_CMUX_RETURN_KEY; else process.env.PI_CMUX_RETURN_KEY = previousKey; });
+	const warnings = [];
+	t.mock.method(console, "warn", (message) => warnings.push(message));
+	const h = harness(t, { extension: piCmuxExtension, settings: { "pi-cmux": { commands: { cmbk: "echo wrong" } } } });
+	await h.commands.get("cmbk").handler("", h.ctx);
+	assert.match(h.notifications.at(-1)[0], /no recorded origin/);
+	assert.equal(h.calls.length, 0, "return must not launch the configured shell command");
+	assert.ok(warnings.some((warning) => warning.includes("/cmbk: command already exists")));
+});
 
 for (const prompt of ["Review the auth flow", "--help", "--handoff", "  First line\nSecond line  ", 'Bob\'s "quoted" task: $HOME $(printf wrong) `printf wrong`; *.txt | cat']) {
 	test(`/cmn launches a fresh workspace and preserves prompt ${JSON.stringify(prompt)}`, async (t) => {

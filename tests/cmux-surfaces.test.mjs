@@ -68,7 +68,7 @@ function createHarness(t, workflow, options = {}) {
 					result = options.respawnResult ?? {};
 					break;
 				case "rename-tab":
-					result = {};
+					result = typeof options.renameResult === "function" ? await options.renameResult() : options.renameResult ?? {};
 					break;
 				default:
 					assert.fail(`Unexpected cmux command: ${args.join(" ")}`);
@@ -78,6 +78,7 @@ function createHarness(t, workflow, options = {}) {
 	};
 	return {
 		pi,
+		calls,
 		delays,
 		callsFor: (command) => calls.filter((args) => (args[0] === "--json" ? args[1] : args[0]) === command),
 		get paneReadCount() { return paneReadCount; },
@@ -91,6 +92,7 @@ function assertTarget(harness, surface) {
 	assert.deepEqual(harness.callsFor("rename-tab"), [
 		["rename-tab", "--workspace", WORKSPACE, "--surface", surface, "--title", TITLE],
 	]);
+	assert.ok(harness.calls.indexOf(harness.callsFor("rename-tab")[0]) < harness.calls.indexOf(harness.callsFor("respawn-pane")[0]), "initialize the title before the command starts");
 }
 
 function assertNoLaunch(harness) {
@@ -116,7 +118,10 @@ for (const workflow of workflows) {
 					...workflow.after,
 				] }),
 			});
-			assert.deepEqual(await workflow.open(harness.pi, { tabTitle: TITLE }), { ok: true });
+			const opened = await workflow.open(harness.pi, { tabTitle: TITLE });
+			assert.equal(opened.ok, true);
+			assert.equal(opened.surfaceRef, expected);
+			assert.equal(opened.source.surface_ref, CALLER_SURFACE);
 			assert.deepEqual(harness.callsFor(workflow.createCommand), [workflow.createArgs]);
 			assert.equal(harness.paneReadCount, 1, "only the legacy compatibility snapshot is needed");
 			assert.deepEqual(harness.delays, [250], "keep the existing surface boot delay, but do not poll");
@@ -133,7 +138,7 @@ for (const workflow of workflows) {
 		});
 		const results = await Promise.all(surfaces.map((_surface, index) =>
 			workflow.open(harness.pi, { tabTitle: `Job ${index + 1}` })));
-		assert.deepEqual(results, [{ ok: true }, { ok: true }]);
+		assert.deepEqual(results.map((result) => [result.ok, result.surfaceRef]), surfaces.map((surface) => [true, surface]));
 		assert.equal(harness.paneReadCount, 2, "one compatibility snapshot per launch, no discovery polling");
 		assert.deepEqual(harness.callsFor("respawn-pane").map((args) => args[4]), surfaces);
 		assert.deepEqual(harness.callsFor("rename-tab").map((args) => [args[4], args[6]]), [
@@ -143,7 +148,7 @@ for (const workflow of workflows) {
 
 	test(`${workflow.name}: a failed compatibility snapshot does not block a returned ID`, async (t) => {
 		const harness = createHarness(t, workflow, { beforeResult: { code: 1, stderr: "pane listing unavailable" } });
-		assert.deepEqual(await workflow.open(harness.pi, { tabTitle: TITLE }), { ok: true });
+		assert.equal((await workflow.open(harness.pi, { tabTitle: TITLE })).ok, true);
 		assert.equal(harness.paneReadCount, 1);
 		assertTarget(harness, CREATED_SURFACE);
 	});
@@ -151,7 +156,7 @@ for (const workflow of workflows) {
 	for (const stdout of ["OK", "", "null", "{}", '{"pane_ref":"pane:2"}', '{"surface_ref":42,"surface_id":false}', '{"surface_ref":"  ","surface_id":""}']) {
 		test(`${workflow.name}: fall back once creation succeeds without an ID: ${JSON.stringify(stdout)}`, async (t) => {
 			const harness = createHarness(t, workflow, { createResult: { stdout } });
-			assert.deepEqual(await workflow.open(harness.pi, { tabTitle: TITLE }), { ok: true });
+			assert.equal((await workflow.open(harness.pi, { tabTitle: TITLE })).ok, true);
 			assert.equal(harness.callsFor(workflow.createCommand).length, 1, "never create a second surface to retry output parsing");
 			assert.equal(harness.paneReadCount, 2);
 			assertTarget(harness, CREATED_SURFACE);
@@ -177,7 +182,23 @@ for (const workflow of workflows) {
 		assert.equal(harness.callsFor(workflow.createCommand).length, 1);
 		assert.equal(harness.paneReadCount, 1);
 		assert.equal(harness.callsFor("respawn-pane")[0][4], CREATED_SURFACE);
+		assertTarget(harness, CREATED_SURFACE); // Initial naming precedes even a failed startup.
+	});
+
+	for (const [label, renameResult] of [["rejection", { code: 1, stderr: "rename failed" }], ["exception", () => { throw new Error("rename unavailable"); }]]) {
+		test(`${workflow.name}: initial naming ${label} remains best-effort without a post-start retry`, async (t) => {
+			const harness = createHarness(t, workflow, { renameResult });
+			assert.equal((await workflow.open(harness.pi, { tabTitle: TITLE })).ok, true);
+			assert.equal(harness.callsFor(workflow.createCommand).length, 1);
+			assertTarget(harness, CREATED_SURFACE);
+		});
+	}
+
+	test(`${workflow.name}: omit initial rename when no title is requested`, async (t) => {
+		const harness = createHarness(t, workflow);
+		assert.equal((await workflow.open(harness.pi, {})).ok, true);
 		assert.deepEqual(harness.callsFor("rename-tab"), []);
+		assert.equal(harness.callsFor("respawn-pane").length, 1);
 	});
 
 	for (const beforeResult of [
@@ -232,7 +253,7 @@ for (const workflow of workflows) {
 
 	test(`${workflow.name}: preserve explicit focus=false`, async (t) => {
 		const harness = createHarness(t, workflow);
-		assert.deepEqual(await workflow.open(harness.pi, { focus: false }), { ok: true });
+		assert.equal((await workflow.open(harness.pi, { focus: false })).ok, true);
 		const args = harness.callsFor(workflow.createCommand)[0];
 		assert.equal(args[args.indexOf("--focus") + 1], "false");
 	});
@@ -245,7 +266,7 @@ test("legacy tab discovery ignores surfaces created in other panes", async (t) =
 		createResult: { stdout: "OK" },
 		pollResult: (index) => jsonResult({ panes: [...(index === 1 ? BEFORE : workflow.after), unrelated] }),
 	});
-	assert.deepEqual(await workflow.open(harness.pi, { tabTitle: TITLE }), { ok: true });
+	assert.equal((await workflow.open(harness.pi, { tabTitle: TITLE })).ok, true);
 	assert.equal(harness.paneReadCount, 3);
 	assertTarget(harness, CREATED_SURFACE);
 });
@@ -257,7 +278,7 @@ test("legacy split discovery ignores new tabs in existing panes", async (t) => {
 		createResult: { stdout: "OK" },
 		pollResult: (index) => jsonResult({ panes: index === 1 ? [unrelated] : [unrelated, workflow.after[1]] }),
 	});
-	assert.deepEqual(await workflow.open(harness.pi, { tabTitle: TITLE }), { ok: true });
+	assert.equal((await workflow.open(harness.pi, { tabTitle: TITLE })).ok, true);
 	assert.equal(harness.paneReadCount, 3);
 	assertTarget(harness, CREATED_SURFACE);
 });
@@ -274,7 +295,7 @@ test("legacy split discovery rejects multiple new panes even if only one has a r
 
 test("preserve downward split placement and explicit focus=true", async (t) => {
 	const harness = createHarness(t, workflows[0]);
-	assert.deepEqual(await openCommandInNewSplit(harness.pi, "down", COMMAND, { focus: true }), { ok: true });
+	assert.equal((await openCommandInNewSplit(harness.pi, "down", COMMAND, { focus: true })).ok, true);
 	assert.deepEqual(harness.callsFor("new-split"), [
 		["--json", "new-split", "down", "--workspace", WORKSPACE, "--surface", CALLER_SURFACE, "--focus", "true"],
 	]);

@@ -1,4 +1,7 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { prepareOrientation, validateRelation, type RelationOptions } from "../lib/orientation/runtime.ts";
+import { encodeBootstrap, orientedTitle } from "../lib/orientation/state.ts";
+import { navigationHints } from "../lib/orientation/hints.ts";
 import {
 	buildContextualTabTitle,
 	buildPiCommand,
@@ -11,7 +14,7 @@ import {
 
 export type PiPlacement = "workspace" | "tab" | SplitDirection;
 
-export interface PiLaunchOptions extends PiCommandOptions {
+export interface PiLaunchOptions extends PiCommandOptions, RelationOptions {
 	placement?: PiPlacement;
 	title?: string;
 	focus?: boolean;
@@ -27,9 +30,12 @@ export const PI_LAUNCH_PROPERTIES = {
 	thinking: { type: "string", enum: ["off", "minimal", "low", "medium", "high", "xhigh", "max"], description: "Optional Pi thinking level." },
 	title: { type: "string", description: "Short task title for the sidebar workspace or tab." },
 	focus: { type: "boolean", default: true, description: "Focus the new workspace or terminal. Set false to open it in the background." },
+	related: { type: "boolean", description: "Share the originating conversation's task marker without copying history. Use true for another agent working on the same task; defaults to false for unrelated chats." },
+	role: { type: "string", enum: ["chat", "review", "continue"], description: "Conversation role. review and continue imply related=true; role alone never copies conversation history." },
 } as const;
 
 export function validatePiLaunchOptions(options: PiLaunchOptions): void {
+	validateRelation(options);
 	if (!["workspace", "right", "down", "tab"].includes(options.placement ?? "workspace")) {
 		throw new Error("Invalid Pi placement");
 	}
@@ -43,8 +49,10 @@ export function describePiPlacement(placement: PiPlacement): string {
 export async function openPiSession(pi: ExtensionAPI, cwd: string, options: PiLaunchOptions, fallbackTitle = "Pi") {
 	validatePiLaunchOptions(options);
 	const placement = options.placement ?? "workspace";
-	const title = await buildContextualTabTitle(pi, cwd, options.title || options.prompt, fallbackTitle);
-	const command = buildPiCommand(cwd, { ...options, provider: options.provider?.trim(), model: options.model?.trim() });
+	const topic = await buildContextualTabTitle(pi, cwd, options.title || options.prompt, fallbackTitle);
+	const seed = prepareOrientation(pi, options, topic);
+	const title = seed ? orientedTitle(seed, topic) : topic;
+	const command = buildPiCommand(cwd, { ...options, orientationBootstrap: seed && encodeBootstrap(seed), provider: options.provider?.trim(), model: options.model?.trim() });
 	const focus = options.focus ?? true;
 	const result = placement === "workspace"
 		? await openCommandInNewWorkspace(pi, cwd, command, { title, focus })
@@ -55,6 +63,7 @@ export async function openPiSession(pi: ExtensionAPI, cwd: string, options: PiLa
 	return {
 		ok: true as const,
 		placement, cwd, title,
-		workspaceRef: "workspaceRef" in result ? result.workspaceRef : undefined,
+		workspaceRef: result.workspaceRef, surfaceRef: result.surfaceRef, source: result.source, created: result.created,
+		orientation: seed, navigation: navigationHints(seed),
 	};
 }

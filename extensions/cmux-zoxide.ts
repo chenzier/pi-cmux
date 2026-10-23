@@ -3,7 +3,8 @@ import { execFileSync } from "node:child_process";
 import { existsSync, statSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { buildContextualTabTitle, buildPiCommand, openCommandInNewSplit, type SplitDirection } from "./cmux-core.ts";
+import { type SplitDirection } from "./cmux-core.ts";
+import { openPiSession } from "./cmux-pi.ts";
 
 const ZOXIDE_TIMEOUT_MS = 5000;
 const MAX_COMPLETIONS = 10;
@@ -96,9 +97,7 @@ async function openPiInZoxideSplit(
 		return targetResult;
 	}
 
-	return openCommandInNewSplit(pi, direction, buildPiCommand(targetResult.path), {
-		tabTitle: await buildContextualTabTitle(pi, targetResult.path, "Pi", "Pi"),
-	});
+	return openPiSession(pi, targetResult.path, { placement: direction, title: "Pi" });
 }
 
 function registerZoxideCommand(

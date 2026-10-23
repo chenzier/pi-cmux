@@ -3,6 +3,7 @@ import { stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { resolve } from "node:path";
 import { resolveHandoffTarget } from "./cmux-continue.ts";
+import { launchNavigationHint } from "../lib/orientation/hints.ts";
 import {
 	describePiPlacement,
 	openPiSession,
@@ -99,7 +100,9 @@ export default function cmuxStartExtension(pi: ExtensionAPI) {
 			"Sessions are fresh by default. Set continueSession=true only for an explicit handoff, continuation, or request to inherit this conversation.",
 			"When the user requests a fresh session in another repo or directory, pass its path through cwd. Relative paths resolve from the current session; ~/ is supported. Omit cwd for handoffs, which retain the source directory or use the new worktree.",
 			"Supply a short task-specific title for the sidebar. For reviews, pass the user's requested review tool or workflow in prompt; do not prescribe one.",
+			"Use role='review' for a reviewer of this task, or related=true for another agent on the same task. These share a task marker, not conversation history. Leave unrelated fresh chats independent.",
 			"For handoffs, include a concise prompt with the goal, progress, next steps, and constraints. Worktree handoffs receive this summary, not the full history; uncommitted files are not copied.",
+			"When confirming a handoff or related/reviewer launch, include the returned origin link and /cmbk return hint. Ctrl+Alt+B is the default shortcut, but it can be changed or disabled; the child navigation note uses its actual configuration. Do not invent links from pane titles or short refs, open the link, or navigate automatically. A native cmux link targets the tab, while /cmbk validates the live originating Pi conversation.",
 			"Pass task text through prompt and model settings through provider, model, and thinking; do not construct a Pi shell command with cmux_open_terminal or bash.",
 			"A handoff leaves this session open. After confirming success, leave the handed-off work to the new agent unless the user asks for parallel work.",
 		],
@@ -115,6 +118,7 @@ export default function cmuxStartExtension(pi: ExtensionAPI) {
 			if (branch && !params.continueSession) throw new Error("branch requires continueSession=true");
 			if (fromRef && !branch) throw new Error("fromRef requires branch");
 			if (params.cwd !== undefined && params.continueSession) throw new Error("cwd cannot be combined with continueSession=true");
+			if (params.continueSession && params.related === false) throw new Error("continueSession requires related=true");
 			signal?.throwIfAborted();
 			let cwd = await resolveStartDirectory(params.cwd, ctx.cwd);
 			let sessionFile: string | undefined;
@@ -132,15 +136,20 @@ export default function cmuxStartExtension(pi: ExtensionAPI) {
 			const title = params.title?.trim() || (params.continueSession ? ctx.sessionManager.getSessionName() : undefined)
 				|| params.prompt?.trim() || (params.continueSession ? "Continue" : "Pi");
 			signal?.throwIfAborted();
-			const result = await openPiSession(pi, cwd, { ...params, sessionFile, prompt, title });
+			const result = await openPiSession(pi, cwd, { ...params, sessionFile, prompt, title,
+				related: params.continueSession ? true : params.related,
+				role: params.role ?? (params.continueSession ? "continue" : undefined),
+			});
 			if (!result.ok) throw new Error(result.error);
 			const location = describePiPlacement(result.placement);
 			return {
-				content: [{ type: "text", text: `Started ${params.continueSession ? "a handoff" : "a fresh Pi session"} in a new cmux ${location}: ${result.title}. Working directory: ${cwd}. The source session remains open.` }],
+				content: [{ type: "text", text: `Started ${params.continueSession ? "a handoff" : "a fresh Pi session"} in a new cmux ${location}: ${result.title}. Working directory: ${cwd}. The source session remains open.${result.navigation ? `\n${launchNavigationHint(result.navigation)}` : ""}` }],
 				details: {
 					placement: result.placement, cwd, title: result.title,
 					continueSession: params.continueSession ?? false, sessionFile,
-					workspaceRef: result.workspaceRef,
+					workspaceRef: result.workspaceRef, surfaceRef: result.surfaceRef,
+					source: result.source, created: result.created, orientation: result.orientation,
+					navigation: result.navigation,
 				},
 			};
 		},

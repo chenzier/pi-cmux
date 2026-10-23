@@ -9,9 +9,11 @@ import cmuxBrowserExtension from "./cmux-browser.ts";
 import cmuxSidebarExtension from "./cmux-sidebar.ts";
 import cmuxAutotitleExtension from "./cmux-autotitle.ts";
 import { initI18n } from "./i18n.ts";
+import registerOrientation from "../lib/orientation/runtime.ts";
 
 export default function piCmuxExtensionBundle(pi: ExtensionAPI) {
 	initI18n(pi);
+	registerOrientation(pi);
 	cmuxNotifyExtension(pi);
 	cmuxSplitExtension(pi);
 	cmuxStartExtension(pi);

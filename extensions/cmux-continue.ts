@@ -2,12 +2,8 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { SessionManager, type ExtensionAPI, type ExtensionContext } from "@earendil-works/pi-coding-agent";
-import {
-	buildContextualTabTitle,
-	buildPiCommand,
-	openCommandInNewSplit,
-	type SplitDirection,
-} from "./cmux-core.ts";
+import { type SplitDirection } from "./cmux-core.ts";
+import { openPiSession } from "./cmux-pi.ts";
 import {
 	ensureCreatedBranchWorktree,
 	getGitRepoInfo,
@@ -405,9 +401,7 @@ async function openContinueSplit(
 	}
 
 	const { cwd, sessionFile, prompt } = handoffTarget.target;
-	const command = buildPiCommand(cwd, { sessionFile, prompt });
-	const title = await buildContextualTabTitle(pi, cwd, "Continue", "Continue");
-	return openCommandInNewSplit(pi, direction, command, { tabTitle: title });
+	return openPiSession(pi, cwd, { sessionFile, prompt, title: "Continue", placement: direction, related: true, role: "continue" });
 }
 
 function registerContinueCommand(

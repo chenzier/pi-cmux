@@ -62,8 +62,9 @@ async function fakeCli(t, options = {}) {
 						case "system.identify": result = { caller: CALLER, focused: { window_id: OTHER_WINDOW, window_ref: "window:99" } }; break;
 						case "window.list": result = { windows: [{ id: OTHER_WINDOW, ref: "window:99" }, { id: WINDOW, ref: "window:1" }] }; break;
 						case "workspace.list":
-							assert.ok([WINDOW, OTHER_WINDOW].includes(request.params.window_id));
-							result = { workspaces: request.params.window_id === WINDOW
+							// Newer CLIs can enumerate workspaces without a window selector while resolving a ref.
+							assert.ok([undefined, WINDOW, OTHER_WINDOW].includes(request.params.window_id));
+							result = { workspaces: request.params.window_id !== OTHER_WINDOW
 								? [{ id: SOURCE_WORKSPACE, ref: "workspace:1" }, { id: WORKSPACE, ref: "workspace:7" }]
 								: [] };
 							break;
@@ -139,9 +140,13 @@ for (const focus of [undefined, true, false]) {
 			if (previousPath === undefined) delete process.env.PATH;
 			else process.env.PATH = previousPath;
 		}
-		assert.deepEqual(await openCommandInNewWorkspace(h.pi, CWD, command, { title: TITLE, focus }), { ok: true, workspaceRef: "workspace:7" });
+		const opened = await openCommandInNewWorkspace(h.pi, CWD, command, { title: TITLE, focus });
+		assert.equal(opened.ok, true);
+		assert.equal(opened.workspaceRef, "workspace:7");
+		assert.equal(opened.surfaceRef, "surface:27");
+		assert.equal(opened.source.surface_ref, "surface:1");
 		assert.deepEqual(h.calls.map(({ args }) => args.slice(0, args[0] === "--json" ? 3 : 1)), [
-			["--json", "identify"], ["--json", "workspace", "create"], ["respawn-pane"], ["rename-tab"],
+			["--json", "identify"], ["--json", "workspace", "create"], ["rename-tab"], ["respawn-pane"],
 		]);
 		assert.deepEqual(h.requestsFor("workspace.create").map(({ params }) => params), [{
 			window_id: WINDOW, cwd: CWD, title: TITLE, focus: focus ?? true,
@@ -155,11 +160,12 @@ for (const focus of [undefined, true, false]) {
 		assert.equal(respawns[0].params.command, `/bin/sh -lc '${command.replaceAll("'", `'"'"'`)}'`);
 		const renames = h.requestsFor("tab.action");
 		assert.equal(renames.length, 1);
-		// rename-tab forwards refs to the server rather than resolving UUIDs.
-		assert.equal(renames[0].params.workspace_id, "workspace:7");
-		assert.equal(renames[0].params.surface_id, "surface:27");
+		// 0.64.25 forwards refs; 0.65.2 resolves the same targets to UUIDs.
+		assert.ok(["workspace:7", WORKSPACE].includes(renames[0].params.workspace_id));
+		assert.ok(["surface:27", SURFACE].includes(renames[0].params.surface_id));
 		assert.equal(renames[0].params.action, "rename");
 		assert.equal(renames[0].params.title, TITLE);
+		assert.ok(h.requests.indexOf(renames[0]) < h.requests.indexOf(respawns[0]), "the installed CLI must initialize the title before starting the child");
 	});
 }
 

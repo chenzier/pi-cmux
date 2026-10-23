@@ -29,7 +29,7 @@ function harness(t, options = {}) {
 						break;
 					}
 					case "respawn-pane": result = options.respawn ?? {}; break;
-					case "rename-tab": result = {}; break;
+					case "rename-tab": result = typeof options.rename === "function" ? await options.rename() : options.rename ?? {}; break;
 					default: assert.fail(`Unexpected command: ${args.join(" ")}`);
 				}
 				return { code: 0, killed: false, stdout: "", stderr: "", ...result };
@@ -45,7 +45,11 @@ function callsFor(h, name) {
 for (const focus of [undefined, true, false]) {
 	test(`workspace: use caller window and returned IDs, focus=${focus}`, async (t) => {
 		const h = harness(t);
-		assert.deepEqual(await openCommandInNewWorkspace(h.pi, "/project", COMMAND, { ...OPTIONS, focus }), { ok: true, workspaceRef: "workspace:2" });
+		const opened = await openCommandInNewWorkspace(h.pi, "/project", COMMAND, { ...OPTIONS, focus });
+		assert.equal(opened.ok, true);
+		assert.equal(opened.workspaceRef, "workspace:2");
+		assert.equal(opened.surfaceRef, "surface:2");
+		assert.equal(opened.source.surface_ref, CALLER.surface_ref);
 		assert.deepEqual(callsFor(h, "workspace create"), [[
 			"--json", "workspace", "create", "--window", "window:1", "--cwd", "/project",
 			"--name", OPTIONS.title, "--focus", String(focus ?? true),
@@ -58,7 +62,10 @@ for (const focus of [undefined, true, false]) {
 
 test("workspace: accept UUID-only creation responses", async (t) => {
 	const h = harness(t, { create: json({ workspace_id: "new-workspace-uuid", surface_id: "new-surface-uuid" }) });
-	assert.deepEqual(await openCommandInNewWorkspace(h.pi, "/project", COMMAND, OPTIONS), { ok: true, workspaceRef: "new-workspace-uuid" });
+	const opened = await openCommandInNewWorkspace(h.pi, "/project", COMMAND, OPTIONS);
+	assert.equal(opened.ok, true);
+	assert.equal(opened.workspaceRef, "new-workspace-uuid");
+	assert.equal(opened.surfaceRef, "new-surface-uuid");
 	assert.equal(callsFor(h, "respawn-pane")[0][2], "new-workspace-uuid");
 	assert.equal(callsFor(h, "respawn-pane")[0][4], "new-surface-uuid");
 });
@@ -112,9 +119,21 @@ for (const [label, poll, count] of [
 	});
 }
 
-test("workspace: propagate respawn failure without renaming or relaunching", async (t) => {
+test("workspace: propagate respawn failure after initial naming without renaming again or relaunching", async (t) => {
 	const h = harness(t, { respawn: { code: 1, stderr: "respawn failed" } });
 	assert.deepEqual(await openCommandInNewWorkspace(h.pi, "/project", COMMAND, OPTIONS), { ok: false, error: "respawn failed" });
 	assert.equal(callsFor(h, "respawn-pane").length, 1);
-	assert.equal(callsFor(h, "rename-tab").length, 0);
+	assert.equal(callsFor(h, "rename-tab").length, 1);
+	assert.ok(h.calls.indexOf(callsFor(h, "rename-tab")[0]) < h.calls.indexOf(callsFor(h, "respawn-pane")[0]));
 });
+
+for (const [label, rename] of [["rejection", { code: 1, stderr: "rename failed" }], ["exception", () => { throw new Error("rename unavailable"); }]]) {
+	test(`workspace: initial naming ${label} is best-effort with no later title write`, async (t) => {
+		const h = harness(t, { rename });
+		assert.equal((await openCommandInNewWorkspace(h.pi, "/project", COMMAND, OPTIONS)).ok, true);
+		assert.equal(callsFor(h, "workspace create").length, 1);
+		assert.equal(callsFor(h, "rename-tab").length, 1);
+		assert.equal(callsFor(h, "respawn-pane").length, 1);
+		assert.ok(h.calls.indexOf(callsFor(h, "rename-tab")[0]) < h.calls.indexOf(callsFor(h, "respawn-pane")[0]));
+	});
+}

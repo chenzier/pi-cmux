@@ -2,6 +2,7 @@ import { getAgentDir, type ExtensionAPI, type ExtensionContext } from "@earendil
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { execCmux, formatTabTitle, getCallerInfo } from "./cmux-core.ts";
+import { renameOrientedTopic } from "../lib/orientation/runtime.ts";
 
 const NAMING_TIMEOUT_MS = 60_000;
 const MAX_MESSAGE_CHARS = 300;
@@ -127,6 +128,8 @@ export default function cmuxAutotitleExtension(pi: ExtensionAPI): void {
 		// Serialize writes so /name finishes after any already-dispatched automatic rename.
 		const result = renameQueue.then(async () => {
 			if (!isCurrent(job)) return false;
+			const oriented = renameOrientedTopic(pi, value, job.signal);
+			if (oriented) return await oriented && isCurrent(job);
 			const result = await execCmux(pi, [
 				"rename-tab", "--workspace", caller.workspace_ref, "--surface", caller.surface_ref, "--title", value,
 			], job.signal);
