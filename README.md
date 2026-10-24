@@ -3,7 +3,7 @@
 [![CI](https://github.com/javiermolinar/pi-cmux/actions/workflows/ci.yml/badge.svg)](https://github.com/javiermolinar/pi-cmux/actions/workflows/ci.yml)
 [![npm version](https://img.shields.io/npm/v/pi-cmux.svg)](https://www.npmjs.com/package/pi-cmux)
 [![Node.js ≥22.19.0](https://img.shields.io/node/v/pi-cmux.svg)](https://www.npmjs.com/package/pi-cmux)
-[![Pi ≥0.85.1](https://img.shields.io/badge/Pi-%E2%89%A50.85.1-8b5cf6.svg)](https://pi.dev)
+[![Pi ≥1.3.0](https://img.shields.io/badge/Pi-%E2%89%A51.3.0-8b5cf6.svg)](https://pi.dev)
 [![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 
 
@@ -25,7 +25,7 @@ A [Pi](https://pi.dev) package that turns [cmux](https://www.cmux.dev) into your
 
 ## Install
 
-Requires Pi **0.85.1 or newer** and Node.js **22.19.0 or newer**. The `pi` executable on your `PATH` must also meet this requirement. Update Pi if needed:
+Requires Pi **1.3.0 or newer** and Node.js **22.19.0 or newer**. The `pi` executable on your `PATH` must also meet this requirement. Update Pi if needed:
 
 ```bash
 npm install -g --ignore-scripts @earendil-works/pi-coding-agent@latest
@@ -107,7 +107,7 @@ Detailed command examples: [docs/usage.md](docs/usage.md).
 | `PI_CMUX_AUTOTITLE_DISABLED` | `0` | Set `1` to disable LLM-generated topics regardless of other settings; stable orientation markers remain. |
 | `PI_CMUX_AUTOTITLE_MODEL` | current session model | Optional `provider/model` or exact model ID for naming. An unknown model skips naming rather than falling back. |
 
-For a quieter sidebar, set `export PI_CMUX_SIDEBAR_MODE=minimal` before starting Pi. Minimal mode suppresses all package logs and progress even if their individual flags are enabled. Tokens appear on the existing status line; set `PI_CMUX_SIDEBAR_TOKENS=0` to hide them. Cost remains opt-in via `PI_CMUX_SIDEBAR_COST=1`. It does not remove existing logs or hide cmux's native message previews, activity, branch, or path. See [sidebar modes](docs/usage.md#sidebar-statuslog).
+For a quieter sidebar, set `export PI_CMUX_SIDEBAR_MODE=minimal` before starting Pi. Minimal mode suppresses package sidebar logs and progress even if their individual flags are enabled. Tokens appear on the existing status line; set `PI_CMUX_SIDEBAR_TOKENS=0` to hide them. Cost remains opt-in via `PI_CMUX_SIDEBAR_COST=1`. It does not remove existing logs or hide cmux's native message previews, activity, branch, or path. See [sidebar modes](docs/usage.md#sidebar-statuslog).
 
 LLM-generated topic titles are **opt-in**; stable orientation markers do not use an LLM. After successful settlement, a background LLM request summarizes up to four recent text messages (300 characters each) and renames only the current cmux tab. This sends conversation excerpts to the selected model provider and may incur additional usage charges. It runs only in interactive Pi inside cmux, uses the session's provider registry, and never creates a child Pi session. `/name` takes priority; automatic titles are saved in the session so reload/resume does not repeat the request. See [conversation tab titles](docs/usage.md#conversation-tab-titles) for configuration and lifecycle behavior.
 
@@ -151,7 +151,9 @@ Use `/ck` to open Hunk in a cmux split, add Hunk comments while reviewing, then 
 
 Ask "start a fresh Pi session in a right split in ~/src/other-repo" to use `cmux_start_pi` with `cwd`. The optional path accepts absolute paths, paths relative to the current session, and `~/…`; it must be an existing directory. Omit it to keep the current directory. `cwd` cannot be combined with `continueSession: true`; handoffs keep the source directory or use the new branch worktree.
 
-For a reviewer of the current task, ask Pi to use `cmux_start_pi` with `role: "review"`; for other same-task chats, use `related: true`. These share a stable task marker **without copying history**. Ordinary fresh chats remain separate groups; handoffs share their source's group. Interactive cmux tabs put the topic first: `<topic> · <role> [<task-tag>]`, for example `Check login · review [ab12]`. The shared task tag uses four characters; detailed conversation markers stay in Pi status and metadata. Pi shows the immediate origin with `/cmbk`. Manual `/name` and optional automatic topics preserve the role and task tag. Handoffs and related chats show a model-readable origin link and return hint at their first normal turn, and the launch tool tells Pi to include that navigation help in its confirmation. Native links select the tab; `/cmbk` additionally validates the live Pi conversation. This requires UUID-bearing cmux APIs, tested with **0.65.2**. See [orientation behavior and limits](docs/usage.md#conversation-orientation).
+Start a same-task reviewer with `cmux_start_pi` and `role: "review"`, or another related chat with `related: true`; neither copies history. Tabs show the topic, role and shared task tag, such as `Check login · review [ab12]`. Use `/cmbk` to return to the live originating conversation. See [conversation orientation](docs/usage.md#conversation-orientation).
+
+For experimental automatic findings return, ask “have another Pi review this and bring the findings back.” `cmux_start_pi.returnResults: true` enables best-effort **follow-up** delivery without steering or cancelling active work. It may start a paid model turn; findings remain untrusted and grant no fix authority. See [peer messaging](docs/usage.md#peer-messaging-experimental).
 
 Ask "open http://localhost:3000 beside Pi" to use `cmux_open_browser`. An **Annotate** toggle appears automatically, initially off. Switch it on, select an element, write a note, and Send; Pi shows a compact note preview with Cancel / Send to Pi before steering. Switch it off to browse normally without losing your draft. Page scripts can forge submissions, so approve only notes you recognize. See [browser usage and lifecycle](docs/usage.md#browser-splits).
 

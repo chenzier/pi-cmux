@@ -6,7 +6,10 @@ const CALLER = { window_ref: "window:1", workspace_ref: "workspace:1", surface_r
 const COMMAND = "cd '/project' && exec pi -- 'Review auth'";
 const OPTIONS = { title: "Review auth · project" };
 const json = (value) => ({ stdout: JSON.stringify(value) });
-const commandName = (args) => args[1] === "workspace" ? args.slice(1, 3).join(" ") : args[0] === "--json" ? args[1] : args[0];
+const commandName = (args) => {
+ const offset = args[0] === "--json" ? (args[1] === "--id-format" ? 3 : 1) : 0;
+ return args[offset] === "workspace" ? args.slice(offset, offset + 2).join(" ") : args[offset];
+};
 
 function harness(t, options = {}) {
 	t.mock.method(globalThis, "setTimeout", (callback) => { queueMicrotask(callback); return 0; });
@@ -51,7 +54,7 @@ for (const focus of [undefined, true, false]) {
 		assert.equal(opened.surfaceRef, "surface:2");
 		assert.equal(opened.source.surface_ref, CALLER.surface_ref);
 		assert.deepEqual(callsFor(h, "workspace create"), [[
-			"--json", "workspace", "create", "--window", "window:1", "--cwd", "/project",
+			"--json", "--id-format", "both", "workspace", "create", "--window", "window:1", "--cwd", "/project",
 			"--name", OPTIONS.title, "--focus", String(focus ?? true),
 		]]);
 		assert.deepEqual(callsFor(h, "respawn-pane"), [["respawn-pane", "--workspace", "workspace:2", "--surface", "surface:2", "--command", COMMAND]]);

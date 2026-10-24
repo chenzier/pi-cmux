@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { openCommandInNewSplit, openCommandInNewTab } from "../extensions/cmux-core.ts";
 
+const commandOffset = args => args[0] === "--json" ? (args[1] === "--id-format" ? 3 : 1) : 0;
 const WORKSPACE = "workspace:1";
 const PANE = "pane:1";
 const CALLER_SURFACE = "surface:1";
@@ -16,14 +17,14 @@ const workflows = [
 		name: "split",
 		createCommand: "new-split",
 		open: (pi, options) => openCommandInNewSplit(pi, "right", COMMAND, options),
-		createArgs: ["--json", "new-split", "right", "--workspace", WORKSPACE, "--surface", CALLER_SURFACE],
+		createArgs: ["--json", "--id-format", "both", "new-split", "right", "--workspace", WORKSPACE, "--surface", CALLER_SURFACE],
 		after: [...BEFORE, { ref: "pane:2", selected_surface_ref: CREATED_SURFACE, surface_refs: [CREATED_SURFACE] }],
 	},
 	{
 		name: "tab",
 		createCommand: "new-surface",
 		open: (pi, options) => openCommandInNewTab(pi, COMMAND, options),
-		createArgs: ["--json", "new-surface", "--type", "terminal", "--workspace", WORKSPACE, "--pane", PANE, "--focus", "true"],
+		createArgs: ["--json", "--id-format", "both", "new-surface", "--type", "terminal", "--workspace", WORKSPACE, "--pane", PANE, "--focus", "true"],
 		after: [{ ref: PANE, selected_surface_ref: CREATED_SURFACE, surface_refs: [CALLER_SURFACE, CREATED_SURFACE] }],
 	},
 ];
@@ -46,7 +47,7 @@ function createHarness(t, workflow, options = {}) {
 		async exec(command, args) {
 			assert.equal(command, "cmux");
 			calls.push(args);
-			const subcommand = args[0] === "--json" ? args[1] : args[0];
+			const subcommand = args[commandOffset(args)];
 			let result;
 			switch (subcommand) {
 				case "identify":
@@ -80,7 +81,7 @@ function createHarness(t, workflow, options = {}) {
 		pi,
 		calls,
 		delays,
-		callsFor: (command) => calls.filter((args) => (args[0] === "--json" ? args[1] : args[0]) === command),
+		callsFor: (command) => calls.filter((args) => args[commandOffset(args)] === command),
 		get paneReadCount() { return paneReadCount; },
 	};
 }
@@ -297,6 +298,6 @@ test("preserve downward split placement and explicit focus=true", async (t) => {
 	const harness = createHarness(t, workflows[0]);
 	assert.equal((await openCommandInNewSplit(harness.pi, "down", COMMAND, { focus: true })).ok, true);
 	assert.deepEqual(harness.callsFor("new-split"), [
-		["--json", "new-split", "down", "--workspace", WORKSPACE, "--surface", CALLER_SURFACE, "--focus", "true"],
+		["--json", "--id-format", "both", "new-split", "down", "--workspace", WORKSPACE, "--surface", CALLER_SURFACE, "--focus", "true"],
 	]);
 });

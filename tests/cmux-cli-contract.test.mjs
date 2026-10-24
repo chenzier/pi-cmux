@@ -6,7 +6,9 @@ import { createServer } from "node:net";
 import { isAbsolute, join } from "node:path";
 import { test } from "node:test";
 import { promisify } from "node:util";
-import { buildPiCommand, buildShellCommand, openCommandInNewWorkspace } from "../extensions/cmux-core.ts";
+import { buildPiCommand, buildShellCommand, openCommandInNewWorkspace, openCommandInNewSplit, openCommandInNewTab } from "../extensions/cmux-core.ts";
+import { MessageClient, METHODS } from "../lib/messaging/client.ts";
+import { makeEnvelope } from "../lib/messaging/protocol.ts";
 
 // Opt in with an absolute CLI path. Default CI never needs cmux or a running app.
 const cli = process.env.PI_CMUX_TEST_CLI;
@@ -18,11 +20,12 @@ const SOURCE_WORKSPACE = "22222222-2222-4222-8222-222222222222";
 const SOURCE_SURFACE = "33333333-3333-4333-8333-333333333333";
 const WORKSPACE = "44444444-4444-4444-8444-444444444444";
 const SURFACE = "55555555-5555-4555-8555-555555555555";
+const PANE = "66666666-6666-4666-8666-666666666666";
 const OTHER_WINDOW = "99999999-9999-4999-8999-999999999999";
 const CALLER = {
 	window_id: WINDOW, window_ref: "window:1",
 	workspace_id: SOURCE_WORKSPACE, workspace_ref: "workspace:1",
-	surface_id: SOURCE_SURFACE, surface_ref: "surface:1",
+	surface_id: SOURCE_SURFACE, surface_ref: "surface:1", pane_id: PANE, pane_ref: "pane:1",
 };
 const CREATED = {
 	window_id: WINDOW, window_ref: "window:1",
@@ -59,6 +62,7 @@ async function fakeCli(t, options = {}) {
 					requests.push(request);
 					let result;
 					switch (request.method) {
+						case "system.capabilities": result = { methods: METHODS }; break;
 						case "system.identify": result = { caller: CALLER, focused: { window_id: OTHER_WINDOW, window_ref: "window:99" } }; break;
 						case "window.list": result = { windows: [{ id: OTHER_WINDOW, ref: "window:99" }, { id: WINDOW, ref: "window:1" }] }; break;
 						case "workspace.list":
@@ -69,10 +73,20 @@ async function fakeCli(t, options = {}) {
 								: [] };
 							break;
 						case "surface.list":
-							assert.equal(request.params.workspace_id, WORKSPACE);
-							result = { surfaces: [{ id: SURFACE, ref: "surface:27" }] };
+							assert.ok([WORKSPACE, SOURCE_WORKSPACE].includes(request.params.workspace_id));
+							result = { surfaces: [{ id: SOURCE_SURFACE, ref: "surface:1" }, { id: SURFACE, ref: "surface:27" }] };
+							break;
+						case "pane.list":
+							assert.equal(request.params.workspace_id, SOURCE_WORKSPACE);
+							result = { panes: [{ id: PANE, ref: "pane:1", surface_ids: [SOURCE_SURFACE], surface_refs: ["surface:1"], selected_surface_id: SOURCE_SURFACE, selected_surface_ref: "surface:1" }] };
+							break;
+						case "surface.split":
+						case "surface.create":
+							assert.equal(request.params.workspace_id, SOURCE_WORKSPACE);
+							result = { ...CREATED, workspace_id: SOURCE_WORKSPACE, workspace_ref: "workspace:1", pane_id: PANE, pane_ref: "pane:1" };
 							break;
 						case "workspace.create":
+							if (options.disconnectCreate) { socket.end(); continue; }
 							if (options.rejectCreate) {
 								socket.write(JSON.stringify({ id: request.id, ok: false, error: { code: "contract_rejected", message: "creation rejected" } }) + "\n");
 								continue;
@@ -81,7 +95,9 @@ async function fakeCli(t, options = {}) {
 							break;
 						case "surface.respawn":
 						case "tab.action": result = CREATED; break;
-						default: throw new Error(`Unexpected method: ${request.method}`);
+						default:
+							if (options.respond) { result = options.respond(request); break; }
+							throw new Error(`Unexpected method: ${request.method}`);
 					}
 					socket.write(JSON.stringify({ id: request.id, ok: true, result }) + "\n");
 				} catch (error) {
@@ -123,7 +139,7 @@ async function fakeCli(t, options = {}) {
 			return result;
 		},
 	};
-	return { pi, requests, calls, requestsFor: (method) => requests.filter((request) => request.method === method) };
+	return { root, pi, requests, calls, requestsFor: (method) => requests.filter((request) => request.method === method) };
 }
 
 for (const focus of [undefined, true, false]) {
@@ -145,8 +161,10 @@ for (const focus of [undefined, true, false]) {
 		assert.equal(opened.workspaceRef, "workspace:7");
 		assert.equal(opened.surfaceRef, "surface:27");
 		assert.equal(opened.source.surface_ref, "surface:1");
-		assert.deepEqual(h.calls.map(({ args }) => args.slice(0, args[0] === "--json" ? 3 : 1)), [
-			["--json", "identify"], ["--json", "workspace", "create"], ["rename-tab"], ["respawn-pane"],
+		assert.equal(opened.created?.surface_id, SURFACE, "return setup needs the actual CLI's full surface UUID, not just its ref");
+		assert.equal(opened.created?.workspace_id, WORKSPACE);
+		assert.deepEqual(h.calls.map(({ args }) => args.slice(0, args[0] === "--json" ? (args[1] === "--id-format" ? 5 : 3) : 1)), [
+			["--json", "identify"], ["--json", "--id-format", "both", "workspace", "create"], ["rename-tab"], ["respawn-pane"],
 		]);
 		assert.deepEqual(h.requestsFor("workspace.create").map(({ params }) => params), [{
 			window_id: WINDOW, cwd: CWD, title: TITLE, focus: focus ?? true,
@@ -169,19 +187,39 @@ for (const focus of [undefined, true, false]) {
 	});
 }
 
+for (const placement of ["right", "down", "tab"]) {
+ test(`installed cmux: ${placement} creation retains full UUID and short ref`, contract, async t => {
+  const h=await fakeCli(t),command="NOT EXECUTED; isolated CLI contract only";
+  const result=placement==='tab'
+   ?await openCommandInNewTab(h.pi,command,{tabTitle:TITLE,focus:false})
+   :await openCommandInNewSplit(h.pi,placement,command,{tabTitle:TITLE,focus:false});
+  assert.equal(result.ok,true,result.error);assert.equal(result.surfaceRef,'surface:27');assert.equal(result.created.surface_id,SURFACE);assert.equal(result.created.workspace_id,SOURCE_WORKSPACE);
+  const method=placement==='tab'?'surface.create':'surface.split';assert.equal(h.requestsFor(method).length,1);const created=h.requestsFor(method)[0];assert.equal(created.params.focus,false);
+  if(placement!=='tab')assert.ok([SOURCE_SURFACE,'surface:1'].includes(created.params.surface_id));
+  const respawn=h.requestsFor('surface.respawn');assert.equal(respawn.length,1);assert.equal(respawn[0].params.surface_id,SURFACE);assert.equal(respawn[0].params.workspace_id,SOURCE_WORKSPACE);
+  assert.equal(h.calls.find(c=>c.args.includes(placement==='tab'?'new-surface':'new-split')).args[2],'both');
+ });
+}
+
 // Locks down the observed CLI distinction that a JSON-returning mock concealed.
 test("installed cmux: legacy new-workspace ignores --json, workspace create honors it", contract, async (t) => {
 	const h = await fakeCli(t);
 	const flags = ["--window", "window:1", "--cwd", CWD, "--name", TITLE, "--focus", "false"];
 	const legacy = await h.pi.exec("cmux", ["--json", "new-workspace", ...flags]);
 	const structured = await h.pi.exec("cmux", ["--json", "workspace", "create", ...flags]);
+	const both = await h.pi.exec("cmux", ["--json", "--id-format", "both", "workspace", "create", ...flags]);
 	assert.equal(legacy.code, 0, legacy.stderr);
 	assert.equal(legacy.stdout, "OK workspace:7\n");
 	assert.equal(structured.code, 0, structured.stderr);
 	assert.deepEqual(JSON.parse(structured.stdout), { window_ref: "window:1", workspace_ref: "workspace:7", surface_ref: "surface:27" });
+	assert.equal(both.code, 0, both.stderr);
+	assert.equal(JSON.parse(both.stdout).workspace_id, WORKSPACE);
+	assert.equal(JSON.parse(both.stdout).surface_id, SURFACE);
+	assert.equal(JSON.parse(both.stdout).surface_ref, "surface:27");
 	const creates = h.requestsFor("workspace.create");
-	assert.equal(creates.length, 2); // Two explicit probes, not a launch retry.
+	assert.equal(creates.length, 3); // Three explicit format probes, not a launch retry.
 	assert.deepEqual(creates[0].params, creates[1].params);
+	assert.deepEqual(creates[1].params, creates[2].params);
 });
 
 for (const [label, options] of [["rejected", { rejectCreate: true }], ["missing IDs", { created: {} }]]) {
@@ -196,3 +234,39 @@ for (const [label, options] of [["rejected", { rejectCreate: true }], ["missing 
 		assert.equal(h.requestsFor("tab.action").length, 0);
 	});
 }
+
+test("installed cmux: disconnect after create is never retried or launched", contract, async (t) => {
+	const h = await fakeCli(t, { disconnectCreate: true });
+	const result = await openCommandInNewWorkspace(h.pi, CWD, "NOT EXECUTED", { title: TITLE, focus: false });
+	assert.equal(result.ok, false);
+	assert.match(result.error, /Socket closed before reply/);
+	assert.equal(h.requestsFor("workspace.create").length, 1);
+	assert.equal(h.calls.length, 2);
+	assert.equal(h.requestsFor("surface.respawn").length, 0);
+	assert.equal(h.requestsFor("tab.action").length, 0);
+});
+
+test("installed cmux: message client preserves UUIDs with send/list/settings only on an isolated socket", contract, async t => {
+ const from={surfaceId:SOURCE_SURFACE,sessionId:WINDOW,conversationId:SOURCE_WORKSPACE,taskId:OTHER_WINDOW};
+ const to={surfaceId:SURFACE,sessionId:WORKSPACE,conversationId:SURFACE,taskId:OTHER_WINDOW};
+ const envelope=makeEnvelope(from,to,"cli-contract","result","A quoted 'report'; $HOME stays data");
+ let stored;
+ const h=await fakeCli(t,{respond:request=>{
+  switch(request.method){
+   case 'agent.message.send':
+    assert.equal(request.params.target,SURFACE);assert.equal(request.params.sender_surface_id,SOURCE_SURFACE);
+    stored={id:WINDOW,thread_id:SOURCE_WORKSPACE,sender_surface_id:SOURCE_SURFACE,recipient_surface_id:SURFACE,body:request.params.body,state:'queued',in_reply_to:null};return {...stored,recipient_surface_ref:'surface:27',recipient_workspace_ref:'workspace:7'};
+   case 'agent.message.list':return {messages:[stored]};
+   case 'agent.message.settings':return {id:SURFACE,scope:'surface',receiving:true,messages_enabled:true,workspace_receiving:true};
+   default:throw Error(`Unexpected messaging method ${request.method}`);
+  }
+ }});
+ const exec=(args,signal)=>h.pi.exec('cmux',args,{signal});
+ const sender=new MessageClient(SOURCE_SURFACE,exec),receiver=new MessageClient(SURFACE,exec);
+ assert.equal((await sender.send(envelope)).recipient_surface_id,SURFACE);
+ assert.equal(await receiver.settings(),true);
+ assert.equal((await receiver.list())[0].body,JSON.stringify(envelope));
+ assert.equal((await receiver.list())[0].state,'queued');
+ assert.equal(h.requestsFor('agent.message.send').length,1);
+ assert.deepEqual(h.requests.filter(r=>r.method.startsWith('agent.message.')).map(r=>r.method),['agent.message.send','agent.message.settings','agent.message.list','agent.message.list']);
+});

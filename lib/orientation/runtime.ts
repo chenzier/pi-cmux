@@ -18,6 +18,11 @@ export function validateRelation(options: RelationOptions): void {
 	if (options.role !== undefined && !["chat", "review", "continue"].includes(options.role)) throw new Error("Invalid conversation role");
 	if (options.related === false && (options.role === "review" || options.role === "continue")) throw new Error("review/continue roles require related=true");
 }
+function ownsBinding(runtime: OrientationRuntime): boolean {
+	const binding = runtime.target && runtime.store.read(runtime.target.surfaceId);
+	return Boolean(runtime.state && binding && binding.token === runtime.token && binding.pid === process.pid && liveBinding(binding, runtime.state));
+}
+
 export function prepareOrientation(pi: ExtensionAPI, options: RelationOptions, topic: string): Bootstrap | undefined {
 	validateRelation(options);
 	const related = options.related ?? (options.role === "review" || options.role === "continue");
@@ -28,8 +33,15 @@ export function prepareOrientation(pi: ExtensionAPI, options: RelationOptions, t
 		if (related) throw new Error("Related launches require an active pi-cmux orientation runtime with UUID targeting");
 		return undefined;
 	}
-	if (!liveBinding(runtime.store.read(runtime.target.surfaceId), runtime.state)) throw new Error("The source conversation binding is no longer live");
+	if (!ownsBinding(runtime)) throw new Error("The source conversation binding is no longer live");
 	return childBootstrap(runtime.state, runtime.target, related, options.role ?? "chat", topic);
+}
+
+/** Read-only current ownership for integrations; labels/related roles never grant authority. */
+export function currentConversation(pi: ExtensionAPI): { state: Orientation; target: Target } | undefined {
+	const runtime = runtimes.get(pi);
+	if (!runtime?.state || !runtime.target || !runtime.eligible || !ownsBinding(runtime)) return;
+	return { state: { ...runtime.state }, target: { ...runtime.target } };
 }
 
 export function renameOrientedTopic(pi: ExtensionAPI, topic: string, signal?: AbortSignal): Promise<boolean> | undefined {
@@ -84,7 +96,7 @@ export class OrientationRuntime {
 			if (!identified.ok || jobSignal.aborted || generation !== this.generation || version !== this.titleVersion) return false;
 			const caller = JSON.parse(identified.stdout)?.caller;
 			const windowId = uuid(caller?.window_id), workspaceId = uuid(caller?.workspace_id), surfaceId = uuid(caller?.surface_id);
-			if (!windowId || !workspaceId || surfaceId !== target.surfaceId || !liveBinding(this.store.read(target.surfaceId), state)) return false;
+			if (!windowId || !workspaceId || surfaceId !== target.surfaceId || !ownsBinding(this)) return false;
 			const result = await execCmux(this.pi, ["rename-tab", "--window", windowId, "--workspace", workspaceId,
 				"--surface", target.surfaceId, "--title", orientedTitle(state, this.topic)], jobSignal);
 			return result.ok && !jobSignal.aborted && generation === this.generation && version === this.titleVersion;

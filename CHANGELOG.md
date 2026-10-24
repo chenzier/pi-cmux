@@ -4,14 +4,22 @@
 
 ### Added
 
-- Added readable topic-first tab titles (`<topic> · <role> [<task-tag>]`), stable task/conversation metadata, and an immediate-origin indicator for bundled interactive Pi sessions. Related tabs share a four-character task tag; detailed conversation markers stay in Pi status and metadata. `cmux_start_pi` supports `related: true` and `role: "review"` to group fresh same-task chats without copying history; handoffs keep their task group. Session-owned metadata and one-shot launch bootstraps keep unrelated sessions separate.
-- Added `/cmbk` and configurable Ctrl+Alt+B (`PI_CMUX_RETURN_KEY`) to return to the exact originating tab, including after workspace/window moves. UUID topology and expiring live-session bindings reject closed, stale, or repurposed origins. Manual and opt-in automatic topic names preserve the stable marker. Global cmux border settings are not changed; task-specific border colors require native support.
-- Added orientation lifecycle/title/navigation regression tests and an explicit opt-in native cmux smoke test using disposable terminals.
-- Handoffs and related sessions now receive a visible, model-readable origin tab link and `/cmbk`/configured-shortcut guidance at the first normal turn on each branch, without rewriting task prompts or waking empty chats. `cmux_start_pi` returns navigation metadata and instructs the launching LLM to include it in confirmations. Native tab links are distinct from live-session-validated return navigation.
+- Experimental peer messaging with nonblocking send/reply, read-only inbox inspection, and opt-in `cmux_start_pi.returnResults` for automatic findings return. Findings use best-effort follow-ups, not steering, and may incur model usage.
+- Topic-first tab titles, shared task markers for related chats, and origin links without copying conversation history.
+- `/cmbk` and configurable **Ctrl+Alt+B** to return to the exact originating conversation, including after tab moves.
+- `cmux_start_pi.cwd` to start fresh Pi sessions in another directory.
+- `PI_CMUX_SIDEBAR_MODE=minimal` for live tokens without package logs/progress, with token opt-out and optional cost display.
 
-- Added optional `cwd` to `cmux_start_pi` for fresh sessions in another repository or directory, across workspace, split, and tab placements. Supports absolute, session-relative, and home-relative paths; rejects invalid directories and combinations with `continueSession` before opening cmux.
+### Changed
 
-- Added `PI_CMUX_SIDEBAR_MODE=minimal|detailed` (default `detailed`). Minimal shows live cumulative tokens on the temporary Pi status and keeps configured flashes while suppressing package progress and all logs. Token opt-out and cost opt-in apply in both modes. Native cmux rows and existing logs are unchanged.
+- Require Pi **1.3.0 or newer**, including the executable on `PATH`.
+
+### Fixed
+
+- Reject stale runtime ownership before scheduling findings, preparing launches, or renaming tabs.
+- Recheck pending launch cancellation before creation and child startup; report already-created surfaces without automatic retry or cleanup.
+- Preserve full creation UUIDs alongside short refs so automatic return setup can identify the correct child.
+- Include `lib/` in local installs so runtime imports resolve.
 
 ## [0.1.24] - 2026-09-28
 

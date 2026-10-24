@@ -4,7 +4,40 @@ import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSyn
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 import { test } from "node:test";
-import { buildPiCommand, buildShellCommand, shellEscape } from "../extensions/cmux-core.ts";
+import { buildPiCommand, buildShellCommand, execCmux, shellEscape } from "../extensions/cmux-core.ts";
+
+test("cmux wrapper forwards arguments, signal and timeout without changing output", async () => {
+	const args = ["--json", "identify"], signal = new AbortController().signal;
+	let calls = 0;
+	const result = await execCmux({ exec: async (command, actual, options) => {
+		calls++;
+		assert.equal(command, "cmux");
+		assert.equal(actual, args);
+		assert.deepEqual(options, { timeout: 5000, signal });
+		return { code: 0, killed: false, stdout: " output ", stderr: " warning " };
+	} }, args, signal);
+	assert.equal(calls, 1);
+	assert.deepEqual(result, { ok: true, stdout: " output ", stderr: " warning " });
+});
+
+for (const [label, outcome, error] of [
+	["stderr", { code: 1, killed: false, stdout: " output ", stderr: " failure " }, "failure"],
+	["stdout fallback", { code: 1, killed: false, stdout: " failure ", stderr: "" }, "failure"],
+	["exit-code fallback", { code: 23, killed: false, stdout: "", stderr: "" }, "cmux exited with code 23"],
+	["timeout", { code: 9, killed: true, stdout: " output ", stderr: " warning " }, "cmux command timed out"],
+]) test(`cmux wrapper preserves ${label} failure without retry`, async () => {
+	let calls = 0;
+	const result = await execCmux({ exec: async () => { calls++; return outcome; } }, ["identify"]);
+	assert.equal(calls, 1);
+	assert.deepEqual(result, { ok: false, stdout: outcome.stdout, stderr: outcome.stderr, error });
+});
+
+test("cmux wrapper propagates the original subprocess exception without retry", async () => {
+	const original = Error("Socket closed before reply");
+	let calls = 0;
+	await assert.rejects(execCmux({ exec: async () => { calls++; throw original; } }, ["identify"]), error => error === original);
+	assert.equal(calls, 1);
+});
 
 // Test the installed Pi parser, not a copy, so dependency updates exercise the CLI contract.
 const piEntry = import.meta.resolve("@earendil-works/pi-coding-agent");

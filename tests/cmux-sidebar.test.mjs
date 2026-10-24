@@ -107,6 +107,16 @@ async function withSidebar(overrides, callback) {
 	}
 }
 
+test("custom-triggered runs clear a previous user prompt without reading custom input as a prompt", async () => {
+	await withSidebar({ PI_CMUX_SIDEBAR_LOG_PROMPT: "1" }, async (h) => {
+		await h.emit("session_start");
+		await h.emit("before_agent_start", { messageType: "user", prompt: "Old private prompt" });
+		await h.emit("before_agent_start", { messageType: "custom", message: { role: "custom", content: "Peer result" }, get prompt() { assert.fail("custom events have no prompt"); } });
+		await h.emit("agent_start");
+		assert.equal(h.commands.some(c => c.args.some(a => String(a).includes("Old private prompt"))), false);
+	});
+});
+
 for (const { name, environment, panel } of [
 	{
 		name: "prefer trimmed surface identity over panel identity",

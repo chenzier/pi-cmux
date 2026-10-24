@@ -9,6 +9,7 @@ Run Pi inside cmux. See the [README](../README.md#install) for installation.
 | New sidebar chat | `/cmn <prompt>` |
 | New Pi split | `/cmv [prompt]` right, `/cmh [prompt]` below |
 | Return to origin | `/cmbk` or **Ctrl+Alt+B** |
+| Inspect/control peer messages | `/cmmsg inbox`, `/cmmsg status`, `/cmmsg on`, `/cmmsg off` |
 | Continue a task | `/cmcv [note]` right, `/cmch [note]` below |
 | Continue in a new worktree | `/cmcv -c <branch> [--from <ref>] [note]` |
 | Run a terminal command | `/cmo <command>` right, `/cmoh <command>` below, `/cmt <command>` in a tab |
@@ -44,7 +45,7 @@ Open a reviewer for this task in a right split.
 
 The `cmux_start_pi` tool supports workspace, right, down, and tab placement, plus a title, focus control, model/provider, and thinking level. `cwd` accepts absolute, session-relative, and `~/…` paths and must name an existing directory. Omit it to keep the current directory. It cannot be combined with `continueSession: true`.
 
-New sessions focus by default; `focus: false` opens them in the background. Sessions are independent, not managed subagents, and results do not automatically return to the source conversation.
+New sessions focus by default; `focus: false` opens them in the background. They remain independent unless requested otherwise. Use `returnResults: true` for an explicit delegation with [automatic findings return](#peer-messaging-experimental).
 
 **If opening fails, inspect cmux before retrying:** a workspace or pane may already exist. Creation is never automatically retried.
 
@@ -85,6 +86,38 @@ Reload/resume preserves the same session's identity. `/new` and other-session re
 Closed, stale, inaccessible, or repurposed origins report “unavailable” rather than selecting another pane. After sleep, allow a few seconds for the live binding to renew. A root conversation has no origin.
 
 Orientation runs in bundled interactive Pi sessions and was tested with cmux **0.65.2**. Task-specific colored borders are not implemented; this package does not change cmux's global border settings. See the [design contract](pane-orientation-design.md) for lifecycle and targeting limits.
+
+## Peer messaging (experimental)
+
+Requires Pi **1.3.0+** inside cmux with native messaging APIs (tested on **0.65.2**). Load changes with a new Pi session or a deliberate `/reload`.
+
+Ask Pi:
+
+```text
+Have another Pi review these changes without editing files and bring the findings back here.
+```
+
+Use `cmux_start_pi` with a task prompt, `returnResults: true` and optionally `role: "review"`, `focus: false`. Automatic return implies `related: true`; it cannot accompany a handoff/continue role or `related: false`. Ordinary related/review and slash-command launches do not enable it.
+
+- The child must send findings with `cmux_message_send` using the supplied routing. Launching it or answering in its pane is not proof of return.
+- The parent polls roughly every **2 seconds**, waits while busy/pending/in a dialog, and delivers eligible findings as a **follow-up**, never steering. Progress stays quiet; idle findings can start a paid model turn.
+- Return permission expires after **30 minutes**. Abort, `/cmmsg off`, session/branch changes or reload stop new scheduling; they do not cancel the child or retract accepted follow-ups.
+- Findings are **untrusted data**, not permission for fixes or more work. Bodies persist in cmux/Pi history and can reach the configured provider.
+- Delivery is **best effort**: input/authentication/compaction races, failures and limits can delay or prevent it. No exactly-once or strict input-priority guarantee.
+- On failure, **inspect before retrying**: a surface or child may already exist. Unknown outcomes are never retried automatically; already-dispatched native work cannot be rolled back.
+
+### Inspection and controls
+
+```text
+/cmmsg inbox     # inspect, without importing or consuming
+/cmmsg status
+/cmmsg on        # observe counts; grants no return permission
+/cmmsg off       # stop observation and revoke return permission
+```
+
+`cmux_message_inbox` provides read-only previews; manual import is retired. Explicit `cmux_message_send` calls use a related peer's full surface UUID, agreed `requestId`, `kind` (`progress`, `question`, `result`) and text. Optional `replyTo` correlates a reply; `id` preserves identity for a deliberate retry. A queued send is not proof of processing.
+
+Neither delivery nor inspection claims, ACKs or marks native messages read. For bounds, ownership, persistence and evidence limits, see the [contract](agent-messaging-design.md) and [validation procedure](agent-messaging-validation.md).
 
 ## Continuation and worktree handoff
 
@@ -169,7 +202,7 @@ After successful settlement, a background request names the current tab—not th
 `PI_CMUX_SIDEBAR_MODE` selects the package's output:
 
 - **`detailed`** (default): status, progress, tokens, and logs.
-- **`minimal`**: status with live tokens and configured flashes; no package logs or progress.
+- **`minimal`**: status with live tokens and configured flashes; no package sidebar logs or progress.
 
 These settings do not hide cmux's native previews, branch, path, or activity, or remove existing logs. Set `PI_CMUX_SIDEBAR=0` to disable package sidebar integration; flash settings remain independent.
 

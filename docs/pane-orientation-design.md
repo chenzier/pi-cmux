@@ -20,7 +20,7 @@ A child receives a bounded, validated, base64url JSON bootstrap in an environmen
 | Session shutdown/reload | Cancel pending renames and remove only this runtime's live binding; leave terminals open. |
 | Invalid metadata / unavailable UUID API | Disable orientation safely and report the limitation; do not guess a target or retry creation. |
 
-Local live bindings under `<agent-dir>/pi-cmux/orientation/` associate a surface UUID with the current Pi session/conversation, process ID, runtime token, and short expiry. Atomic private-file replacement and periodic renewal support detecting a terminal that now hosts a different session or no live Pi. No prompt contents or credentials are stored. Expired bindings fail closed; stale files are not proof of liveness. This is local navigation metadata, not an authorization or cross-user security boundary.
+Local live bindings under `<agent-dir>/pi-cmux/orientation/` associate a surface UUID with the current Pi session/conversation, process ID, runtime token, and short expiry. Atomic private-file replacement and periodic renewal support detecting a terminal that now hosts a different session or no live Pi. No prompt contents or credentials are stored. Expired bindings fail closed; stale files are not proof of liveness. Own resolution, launch preparation and title writes also require this runtime's exact claim token and process ID; they do not wait for renewal to notice a same-endpoint replacement. This is local navigation metadata, not an authorization or cross-user security boundary.
 
 ## Labels and title ownership
 
@@ -46,7 +46,7 @@ Closed, expired, inaccessible, duplicated, malformed, or repurposed targets repo
 
 Inspected cmux **0.65.2 (111), commit `9d01f956c`**: UUID-bearing `identify` and `tree --all` responses are available; `surface.focus` focuses the owning window and calls `focusTab(workspace, surfaceId:)` (`Sources/TerminalController+ControlSurfaceContext.swift`). New orientation behavior requires those response shapes and fails closed on incompatible versions. Existing terminal creation compatibility, including bounded unambiguous legacy discovery, remains separate; creation is never automatically repeated.
 
-Pi APIs used are available in the package's pinned **0.85.1** development dependency: custom entries, branch/session IDs, session lifecycle events, status text, and extension shortcuts. No newer minimum Pi API is required.
+The original orientation APIs were verified against Pi 0.85.1. The package now pins and requires **Pi 1.3.0+** for its modern lifecycle and messaging integration; this is the supported baseline for current validation.
 
 The current cmux `paneBorderColor` and `activePaneBorderColor` settings are global. Ghostty `split-divider-color` is also not task-specific. This package does not edit those settings or draw native borders. Per-surface task colors remain native cmux work, outside this implementation.
 

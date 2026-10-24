@@ -625,7 +625,7 @@ export default function cmuxSidebarExtension(pi: ExtensionAPI) {
 	});
 
 	pi.on("before_agent_start", async (event) => {
-		pendingPrompt = event.prompt ? truncateText(event.prompt, MAX_PROMPT_LENGTH) : undefined;
+		pendingPrompt = event.messageType !== "custom" && event.prompt ? truncateText(event.prompt, MAX_PROMPT_LENGTH) : undefined;
 	});
 
 	pi.on("agent_start", async (_event, ctx) => {

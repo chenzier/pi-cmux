@@ -8,7 +8,7 @@ import { SessionManager } from "@earendil-works/pi-coding-agent";
 import { buildPiCommand } from "../extensions/cmux-core.ts";
 import { openPiSession } from "../extensions/cmux-pi.ts";
 import cmuxStart from "../extensions/cmux-start.ts";
-import { prepareOrientation } from "../lib/orientation/runtime.ts";
+import { currentConversation, prepareOrientation } from "../lib/orientation/runtime.ts";
 import { BOOTSTRAP_ENV, ORIENTATION_ENTRY, childBootstrap, decodeBootstrap, encodeBootstrap, liveBinding, parseOrientation, rootOrientation } from "../lib/orientation/state.ts";
 import { orientationHarness, target } from "./helpers/orientation.mjs";
 
@@ -121,6 +121,19 @@ test("expired or repurposed source bindings reject tracked launches before creat
 	h.store.write(h.location.surfaceId, { ...binding, conversationId: randomUUID() });
 	h.runtime.stop();
 	assert.equal(h.store.read(h.location.surfaceId), undefined, "the same runtime token can clean up its expired/changed claim");
+});
+
+for (const replacement of ["token", "pid"]) test(`own resolution and preparation reject a replaced ${replacement} before renewal`, async (t) => {
+	const h = orientationHarness(t); await h.emit("session_start");
+	assert.ok(currentConversation(h.pi));
+	const binding = h.store.read(h.location.surfaceId);
+	h.store.write(h.location.surfaceId, { ...binding, [replacement]: replacement === "token" ? randomUUID() : process.ppid });
+	assert.equal(currentConversation(h.pi), undefined);
+	const renames = h.calls.filter(c => c.args[0] === "rename-tab").length;
+	assert.equal(await h.runtime.renameTopic("Stale owner"), false);
+	assert.equal(h.calls.filter(c => c.args[0] === "rename-tab").length, renames);
+	assert.throws(() => prepareOrientation(h.pi, { role: "review" }, "Review"), /binding.*live/);
+	assert.equal(h.calls.some(c => c.args.includes("create") || c.args.includes("new-split")), false);
 });
 
 test("shutdown does not remove another runtime's binding", async (t) => {

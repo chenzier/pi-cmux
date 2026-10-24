@@ -1,6 +1,6 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { prepareOrientation, validateRelation, type RelationOptions } from "../lib/orientation/runtime.ts";
-import { encodeBootstrap, orientedTitle } from "../lib/orientation/state.ts";
+import { currentConversation, prepareOrientation, validateRelation, type RelationOptions } from "../lib/orientation/runtime.ts";
+import { encodeBootstrap, orientedTitle, type Bootstrap } from "../lib/orientation/state.ts";
 import { navigationHints } from "../lib/orientation/hints.ts";
 import {
 	buildContextualTabTitle,
@@ -46,19 +46,27 @@ export function describePiPlacement(placement: PiPlacement): string {
 	return placement === "workspace" ? "sidebar workspace" : placement === "tab" ? "tab" : `${placement} split`;
 }
 
-export async function openPiSession(pi: ExtensionAPI, cwd: string, options: PiLaunchOptions, fallbackTitle = "Pi") {
+// The optional check must be side-effect-free: helpers repeat it at dispatch boundaries.
+export async function openPiSession(pi: ExtensionAPI, cwd: string, options: PiLaunchOptions, fallbackTitle = "Pi", beforeLaunch?: (seed: Bootstrap | undefined) => void) {
 	validatePiLaunchOptions(options);
 	const placement = options.placement ?? "workspace";
 	const topic = await buildContextualTabTitle(pi, cwd, options.title || options.prompt, fallbackTitle);
 	const seed = prepareOrientation(pi, options, topic);
+	const checkLaunch = () => {
+		const origin = seed?.origin, own = origin && currentConversation(pi);
+		if (origin && (!own || own.state.sessionId !== origin.sessionId || own.state.conversationId !== origin.conversationId
+			|| own.state.taskId !== origin.taskId || own.target.surfaceId !== origin.target.surfaceId)) throw new Error("Launch origin binding changed");
+		beforeLaunch?.(seed);
+	};
+	checkLaunch();
 	const title = seed ? orientedTitle(seed, topic) : topic;
 	const command = buildPiCommand(cwd, { ...options, orientationBootstrap: seed && encodeBootstrap(seed), provider: options.provider?.trim(), model: options.model?.trim() });
 	const focus = options.focus ?? true;
 	const result = placement === "workspace"
-		? await openCommandInNewWorkspace(pi, cwd, command, { title, focus })
+		? await openCommandInNewWorkspace(pi, cwd, command, { title, focus, checkLaunch })
 		: placement === "tab"
-			? await openCommandInNewTab(pi, command, { tabTitle: title, focus })
-			: await openCommandInNewSplit(pi, placement, command, { tabTitle: title, focus });
+			? await openCommandInNewTab(pi, command, { tabTitle: title, focus, checkLaunch })
+			: await openCommandInNewSplit(pi, placement, command, { tabTitle: title, focus, checkLaunch });
 	if (!result.ok) return result;
 	return {
 		ok: true as const,

@@ -72,11 +72,13 @@ interface CmuxExecResult {
 export interface OpenCommandInNewSplitOptions {
 	tabTitle?: string;
 	focus?: boolean;
+	checkLaunch?: () => void;
 }
 
 export interface OpenCommandInNewTabOptions {
 	tabTitle?: string;
 	focus?: boolean;
+	checkLaunch?: () => void;
 }
 
 function delay(ms: number): Promise<void> {
@@ -279,17 +281,28 @@ async function listPanes(pi: ExtensionAPI, workspaceRef: string): Promise<{ ok: 
 	return { ok: true, panes: parsed.panes };
 }
 
+// Stop further dispatch without pretending a created surface can be safely retried.
+function checkCreatedLaunch(check?: () => void): void {
+	try { check?.(); }
+	catch (error) {
+		throw new Error(`Created cmux surface, but child command was not dispatched. Do not relaunch automatically. ${error instanceof Error ? error.message : String(error)}`);
+	}
+}
+
 async function waitForNewSurface(
 	pi: ExtensionAPI,
 	workspaceRef: string,
 	previousPanes: CmuxPaneInfo[],
 	paneRef?: string,
+	checkLaunch?: () => void,
 ): Promise<string | undefined> {
 	const previousPaneRefs = new Set(previousPanes.map((pane) => pane.ref));
 	const previousSurfaceRefs = collectSurfaceRefs(previousPanes);
 
 	for (let attempt = 0; attempt < SPLIT_READY_ATTEMPTS; attempt += 1) {
+		checkCreatedLaunch(checkLaunch);
 		const panesResult = await listPanes(pi, workspaceRef);
+		checkCreatedLaunch(checkLaunch);
 		if (!panesResult.ok) {
 			return undefined;
 		}
@@ -336,7 +349,15 @@ async function respawnSurface(
 	surfaceRef: string,
 	command: string,
 	failureMessage: string,
+	title: string | undefined,
+	checkLaunch?: () => void,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
+	checkCreatedLaunch(checkLaunch);
+	await delay(SURFACE_BOOT_DELAY_MS);
+	checkCreatedLaunch(checkLaunch);
+	// Initialize before child command dispatch; never rename after respawn.
+	await renameSurfaceTab(pi, workspaceRef, surfaceRef, title);
+	checkCreatedLaunch(checkLaunch);
 	const respawnResult = await execCmux(pi, [
 		"respawn-pane",
 		"--workspace",
@@ -357,7 +378,7 @@ export async function openCommandInNewWorkspace(
 	pi: ExtensionAPI,
 	cwd: string,
 	command: string,
-	options: { title: string; focus?: boolean },
+	options: { title: string; focus?: boolean; checkLaunch?: () => void },
 ): Promise<CommandOpenResult> {
 	const callerResult = await getCallerInfo(pi);
 	if (!callerResult.ok) return callerResult;
@@ -368,9 +389,11 @@ export async function openCommandInNewWorkspace(
 
 	// Do not pass --command here: some cmux versions type it into an interactive
 	// shell. Respawn only the returned workspace's surface, like splits and tabs.
+	options.checkLaunch?.();
 	const result = await execCmux(pi, [
 		// The legacy new-workspace verb ignores --json on cmux 0.64.25.
-		"--json", "workspace", "create",
+		// Keep refs for command targeting and UUIDs for exact return authorization.
+		"--json", "--id-format", "both", "workspace", "create",
 		"--window", windowRef,
 		"--cwd", cwd,
 		"--name", formatTabTitle(options.title, "Pi"),
@@ -380,6 +403,7 @@ export async function openCommandInNewWorkspace(
 		return { ok: false, error: result.error || "Failed to create cmux workspace" };
 	}
 
+	checkCreatedLaunch(options.checkLaunch);
 	const parsed = parseJson<{ workspace_ref?: unknown; workspace_id?: unknown }>(result.stdout);
 	const workspaceRef = [parsed?.workspace_ref, parsed?.workspace_id]
 		.find((value): value is string => typeof value === "string" && Boolean(value.trim()))?.trim();
@@ -387,17 +411,13 @@ export async function openCommandInNewWorkspace(
 		|| (createdIds(result.stdout).workspace_id !== undefined && createdIds(result.stdout).workspace_id === callerResult.caller.workspace_id)) {
 		return { ok: false, error: "Created workspace, but could not identify the new cmux workspace safely" };
 	}
-	const surfaceRef = getCreatedSurfaceRef(result.stdout) ?? await waitForNewSurface(pi, workspaceRef, []);
+	const surfaceRef = getCreatedSurfaceRef(result.stdout) ?? await waitForNewSurface(pi, workspaceRef, [], undefined, options.checkLaunch);
 	if (!surfaceRef || surfaceRef === callerResult.caller.surface_ref || surfaceRef === callerResult.caller.surface_id
 		|| (createdIds(result.stdout).surface_id !== undefined && createdIds(result.stdout).surface_id === callerResult.caller.surface_id)) {
 		return { ok: false, error: "Created workspace, but could not identify its new cmux surface safely" };
 	}
 
-	await delay(SURFACE_BOOT_DELAY_MS);
-	// Initialize before the child can rename itself or switch session identity.
-	// No parent title write may follow respawn completion.
-	await renameSurfaceTab(pi, workspaceRef, surfaceRef, options.title);
-	const respawnResult = await respawnSurface(pi, workspaceRef, surfaceRef, command, "Failed to start Pi in the new workspace");
+	const respawnResult = await respawnSurface(pi, workspaceRef, surfaceRef, command, "Failed to start Pi in the new workspace", options.title, options.checkLaunch);
 	if (!respawnResult.ok) return respawnResult;
 	return { ok: true, workspaceRef, surfaceRef, source: callerResult.caller, created: createdIds(result.stdout) };
 }
@@ -418,7 +438,7 @@ export async function openCommandInNewSplit(
 	const beforePanesResult = await listPanes(pi, workspaceRef);
 
 	const splitArgs = [
-		"--json",
+		"--json", "--id-format", "both",
 		"new-split",
 		direction,
 		"--workspace",
@@ -430,22 +450,21 @@ export async function openCommandInNewSplit(
 		splitArgs.push("--focus", String(options.focus));
 	}
 
+	options.checkLaunch?.();
 	const splitResult = await execCmux(pi, splitArgs);
 	if (!splitResult.ok) {
 		return { ok: false, error: splitResult.error || "Failed to create cmux split" };
 	}
 
+	checkCreatedLaunch(options.checkLaunch);
 	const newSurfaceRef = getCreatedSurfaceRef(splitResult.stdout) ??
-		(beforePanesResult.ok ? await waitForNewSurface(pi, workspaceRef, beforePanesResult.panes) : undefined);
+		(beforePanesResult.ok ? await waitForNewSurface(pi, workspaceRef, beforePanesResult.panes, undefined, options.checkLaunch) : undefined);
 	if (!newSurfaceRef || newSurfaceRef === surfaceRef || newSurfaceRef === callerResult.caller.surface_id
 		|| (createdIds(splitResult.stdout).surface_id !== undefined && createdIds(splitResult.stdout).surface_id === callerResult.caller.surface_id)) {
 		return { ok: false, error: "Created split, but could not identify the new cmux surface safely" };
 	}
 
-	await delay(SURFACE_BOOT_DELAY_MS);
-	await renameSurfaceTab(pi, workspaceRef, newSurfaceRef, options.tabTitle);
-
-	const respawnResult = await respawnSurface(pi, workspaceRef, newSurfaceRef, command, "Failed to start pi in the new split");
+	const respawnResult = await respawnSurface(pi, workspaceRef, newSurfaceRef, command, "Failed to start pi in the new split", options.tabTitle, options.checkLaunch);
 	if (!respawnResult.ok) {
 		return respawnResult;
 	}
@@ -471,8 +490,9 @@ export async function openCommandInNewTab(
 	// Keep a pre-creation snapshot only for the legacy discovery fallback.
 	const beforePanesResult = await listPanes(pi, workspaceRef);
 
+	options.checkLaunch?.();
 	const newSurfaceResult = await execCmux(pi, [
-		"--json",
+		"--json", "--id-format", "both",
 		"new-surface",
 		"--type",
 		"terminal",
@@ -487,17 +507,15 @@ export async function openCommandInNewTab(
 		return { ok: false, error: newSurfaceResult.error || "Failed to create cmux tab" };
 	}
 
+	checkCreatedLaunch(options.checkLaunch);
 	const newSurfaceRef = getCreatedSurfaceRef(newSurfaceResult.stdout) ??
-		(beforePanesResult.ok ? await waitForNewSurface(pi, workspaceRef, beforePanesResult.panes, paneRef) : undefined);
+		(beforePanesResult.ok ? await waitForNewSurface(pi, workspaceRef, beforePanesResult.panes, paneRef, options.checkLaunch) : undefined);
 	if (!newSurfaceRef || newSurfaceRef === callerResult.caller.surface_ref || newSurfaceRef === callerResult.caller.surface_id
 		|| (createdIds(newSurfaceResult.stdout).surface_id !== undefined && createdIds(newSurfaceResult.stdout).surface_id === callerResult.caller.surface_id)) {
 		return { ok: false, error: "Created tab, but could not identify the new cmux surface safely" };
 	}
 
-	await delay(SURFACE_BOOT_DELAY_MS);
-	await renameSurfaceTab(pi, workspaceRef, newSurfaceRef, options.tabTitle);
-
-	const respawnResult = await respawnSurface(pi, workspaceRef, newSurfaceRef, command, "Failed to start command in the new tab");
+	const respawnResult = await respawnSurface(pi, workspaceRef, newSurfaceRef, command, "Failed to start command in the new tab", options.tabTitle, options.checkLaunch);
 	if (!respawnResult.ok) {
 		return respawnResult;
 	}
