@@ -203,6 +203,6 @@ Use `/edit src/auth.ts`, `/dev` or `/logs`. Options: `run`, `acceptArgs`, `direc
 
 ## Compatibility
 
-Workspace/browser behavior was tested with cmux **0.64.25**; orientation and ordinary-local-workspace SSH helper/child tabs with **0.65.2**. Splits/other native layouts and the latest launch-size changes lack native validation; no minimum cmux version is certified for protected creation. Missing capabilities or ambiguous identity fail without retry/substitute placement.
+Workspace/browser behavior was tested with cmux **0.64.25**; orientation and ordinary-local-workspace SSH helper/child tabs with **0.65.2**. The 0.3.0 [local startup smoke](startup-smoke.md) passed for one no-prompt sidebar workspace and one protected local-context tab on **0.65.2** with Pi **1.4.0**, including exact child bindings and independent local process/cwd checks. Splits, other native layouts, long prompts and live transport failures remain unverified; no minimum cmux version is certified for protected creation. Missing capabilities or ambiguous identity fail without retry/substitute placement.
 
 Bundled Pi tabs/splits use protected local-context creation. Local sidebar workspaces still use create + respawn; standalone legacy Pi paths can use discovery/respawn. These paths may run login profiles. Remote-owned layouts and SSH worktrees/handoffs/zoxide/new browser previews are refused. See [SSH limits](ssh.md#limits).

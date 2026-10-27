@@ -2,30 +2,49 @@
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-27
+
 ### Added
 
-- Parent startup guard for `cmux_start_pi`: bounded verification of the exact child’s live Pi binding, explicit unconfirmed results and parent UI warnings without model turns or automatic retries. Preserve creation/dispatch phase and known target refs on workspace launch transport failures; include command byte counts for diagnostics.
-- Experimental SSH execution with explicit target selection, conversational connect, bounded discovery and separately confirmed alias saving. Pi/storage remain local; non-ready remote intent never falls back locally. Resume/children restore configured-only selection.
-- Related chat identities, topic-first titles, origin links and `/cmbk` with configurable shortcut.
-- Experimental peer messaging and opt-in delegated findings return. Delivery is best-effort follow-up, may incur model usage and grants no fix authority.
-- `cmux_start_pi.cwd` for fresh sessions in another directory; minimal sidebar mode.
+- Experimental SSH execution with explicit target selection, conversational connect, bounded discovery and separately confirmed alias saving. Pi and storage remain local; non-ready remote intent never falls back locally. Resume and child launches restore selection, not readiness.
+- Parent startup guard for `cmux_start_pi`: bounded verification of the exact child’s live Pi binding, explicit unconfirmed results and parent UI warnings without model turns or automatic retries. A binding does not confirm task readiness or completion.
 
 ### Changed
 
 - Default local Pi launches to minimal PATH: resolve Pi/Node directories and invoke absolute Pi. `PI_CMUX_PI_PATH_MODE=full` preserves caller PATH; both modes propagate.
-- Use compact orientation bootstraps and shorter return instructions. Legacy input/persisted entries remain supported; children need updated code. No universal launch-size guarantee.
+- Use compact orientation bootstraps and shorter return instructions. Legacy input and persisted entries remain supported; children need updated code. No universal launch-size guarantee.
 - Protect bundled Pi tabs/splits and helper creation with local-context RPCs, verified locality and exact UUIDs. Refuse unsupported remote-owned placement without retry. Local sidebar workspaces retain create + respawn.
-- Require Pi **1.3.0+**, including the executable on PATH.
 
 ### Fixed
 
 - Abort revoked SSH grants; commit readiness only under current authority. Frame file replies to reject stdout contamination; malformed mutation acknowledgements remain uncertain without replay. Remote file operations require POSIX `wc`.
-- Recheck launch/runtime ownership and cancellation; preserve creation UUIDs; normalize native UUID case and permit neutral model/thinking startup metadata.
-- Include `lib/` in local installs.
+- Normalize native UUID case and permit neutral model/thinking startup metadata.
+- Distinguish workspace creation from command dispatch on transport failures. Preserve known target refs after creation and report command byte counts without including the launch command.
 
 ### Documentation
 
-- Condense usage and SSH references; correct startup naming, login-shell and validation claims. Native evidence remains limited to historical ordinary-local-workspace tabs and post-fix clean SSH core operations; other layouts/fault injection and latest launch-size changes lack native validation.
+- Condense usage and SSH references; correct startup naming, login-shell and validation claims. Record the [local startup smoke](docs/startup-smoke.md): one no-prompt workspace and one protected tab passed on cmux 0.65.2 with Pi 1.4.0. SSH evidence remains limited to historical ordinary-local-workspace tabs and post-fix clean core operations; splits, other layouts, long prompts and live fault injection remain unverified.
+
+## [0.2.0] - 2026-10-25
+
+### Added
+
+- Experimental peer messaging with nonblocking send/reply, read-only inbox inspection, and opt-in `cmux_start_pi.returnResults` for automatic findings return. Findings use best-effort follow-ups, not steering, and may incur model usage.
+- Topic-first tab titles, shared task markers for related chats, and origin links without copying conversation history.
+- `/cmbk` and configurable **Ctrl+Alt+B** to return to the exact originating conversation, including after tab moves.
+- `cmux_start_pi.cwd` to start fresh Pi sessions in another directory.
+- `PI_CMUX_SIDEBAR_MODE=minimal` for live tokens without package logs/progress, with token opt-out and optional cost display.
+
+### Changed
+
+- Require Pi **1.3.0 or newer**, including the executable on `PATH`.
+
+### Fixed
+
+- Reject stale runtime ownership before scheduling findings, preparing launches, or renaming tabs.
+- Recheck pending launch cancellation before creation and child startup; report already-created surfaces without automatic retry or cleanup.
+- Preserve full creation UUIDs alongside short refs so automatic return setup can identify the correct child.
+- Include `lib/` in local installs so runtime imports resolve.
 
 ## [0.1.24] - 2026-09-28
 
@@ -91,7 +110,7 @@
 ### Fixed
 
 - Preserve the calling Pi process's `PATH` when launching new Pi sessions, fixing `pi: not found` when cmux's terminal environment cannot find Pi or Node.
-- Preserve the same `PATH` for `cmux_open_terminal`, `/cmo`, `/cmov`, `/cmoh`, `/cmt`, and configured tool shortcuts, fixing `hunk: command not found` and similar failures in splits and tabs. Launch the inner system shell via `/bin/sh -c`. Correction: cmux's outer login shell can still load profiles before the command restores `PATH` (see Unreleased).
+- Preserve the same `PATH` for `cmux_open_terminal`, `/cmo`, `/cmov`, `/cmoh`, `/cmt`, and configured tool shortcuts, fixing `hunk: command not found` and similar failures in splits and tabs. Launch the inner system shell via `/bin/sh -c`. Correction: cmux's outer login shell can still load profiles before the command restores `PATH` (see 0.1.24).
 
 ## [0.1.18] - 2026-09-07
 
