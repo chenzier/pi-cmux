@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { SessionManager, type ExtensionAPI, type ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { type SplitDirection } from "./cmux-core.ts";
 import { openPiSession } from "./cmux-pi.ts";
+import { capturePiLaunch, hasSshIntent } from "../lib/ssh/launch.ts";
 import {
 	ensureCreatedBranchWorktree,
 	getGitRepoInfo,
@@ -340,53 +341,62 @@ export async function resolveHandoffTarget(
 	pi: ExtensionAPI,
 	ctx: HandoffSource,
 	request: ContinueRequest,
-	leafId: string | null = ctx.sessionManager.getLeafId(),
+	leafId?: string | null,
 ): Promise<{ ok: true; target: HandoffTarget } | { ok: false; error: string }> {
-	if (request.mode === "handoff") {
-		const context = await buildHandoffContext(pi, ctx, request.note);
-		const forkedSessionFile = createForkedSameCheckoutSession(ctx, buildHandoffSummary(context, true), leafId);
-		const sessionFile = forkedSessionFile || createSummaryOnlySession(ctx.cwd, buildHandoffSummary(context, false));
-		if (!sessionFile) {
-			return { ok: false, error: "Failed to create a handoff session" };
+	if (hasSshIntent(pi)) return { ok: false, error: "SSH handoffs/worktrees are unsupported; no local Git or session preparation was performed" };
+	const launch = capturePiLaunch(pi, ctx.cwd);
+	try {
+		leafId = leafId === undefined ? ctx.sessionManager.getLeafId() : leafId;
+		if (request.mode === "handoff") {
+			const context = await buildHandoffContext(pi, ctx, request.note);
+			launch.check();
+			const forkedSessionFile = createForkedSameCheckoutSession(ctx, buildHandoffSummary(context, true), leafId);
+			const sessionFile = forkedSessionFile || createSummaryOnlySession(ctx.cwd, buildHandoffSummary(context, false));
+			if (!sessionFile) {
+				return { ok: false, error: "Failed to create a handoff session" };
+			}
+			return {
+				ok: true,
+				target: {
+					cwd: ctx.cwd,
+					sessionFile,
+					prompt: buildSameCheckoutPrompt(request.note, Boolean(forkedSessionFile)),
+				},
+			};
 		}
+
+		const repo = await getGitRepoInfo(pi, ctx.cwd);
+		launch.check();
+		if (!repo) {
+			return { ok: false, error: "Not inside a git repository" };
+		}
+
+		const worktreeResult = await ensureCreatedBranchWorktree(pi, repo.repoRoot, request.branch, request.fromRef);
+		launch.check();
+		if (!worktreeResult.ok) {
+			return worktreeResult;
+		}
+
+		const context = await buildHandoffContext(pi, ctx, request.note);
+		launch.check();
+		context.targetBranch = request.branch;
+		context.fromRef = request.fromRef;
+		context.targetWorktreePath = worktreeResult.path;
+		const summary = buildHandoffSummary(context, false);
+		const sessionFile = createSummaryOnlySession(worktreeResult.path, summary);
+		if (!sessionFile) {
+			return { ok: false, error: "Failed to create a worktree handoff session" };
+		}
+
 		return {
 			ok: true,
 			target: {
-				cwd: ctx.cwd,
+				cwd: worktreeResult.path,
 				sessionFile,
-				prompt: buildSameCheckoutPrompt(request.note, Boolean(forkedSessionFile)),
+				prompt: buildWorktreeBootstrapPrompt(request.branch, request.note),
 			},
 		};
-	}
-
-	const repo = await getGitRepoInfo(pi, ctx.cwd);
-	if (!repo) {
-		return { ok: false, error: "Not inside a git repository" };
-	}
-
-	const worktreeResult = await ensureCreatedBranchWorktree(pi, repo.repoRoot, request.branch, request.fromRef);
-	if (!worktreeResult.ok) {
-		return worktreeResult;
-	}
-
-	const context = await buildHandoffContext(pi, ctx, request.note);
-	context.targetBranch = request.branch;
-	context.fromRef = request.fromRef;
-	context.targetWorktreePath = worktreeResult.path;
-	const summary = buildHandoffSummary(context, false);
-	const sessionFile = createSummaryOnlySession(worktreeResult.path, summary);
-	if (!sessionFile) {
-		return { ok: false, error: "Failed to create a worktree handoff session" };
-	}
-
-	return {
-		ok: true,
-		target: {
-			cwd: worktreeResult.path,
-			sessionFile,
-			prompt: buildWorktreeBootstrapPrompt(request.branch, request.note),
-		},
-	};
+	} finally { launch.close(); }
 }
 
 async function openContinueSplit(

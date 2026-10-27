@@ -1,10 +1,15 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { capturePiLaunch, encodeSshLaunch, withSshLaunchEnvironment } from "../lib/ssh/launch.ts";
+import { assertLocalWorkspace } from "../lib/ssh/terminal.ts";
+import { getSshTargetRuntime } from "../lib/ssh/runtime.ts";
 import { currentConversation, prepareOrientation, validateRelation, type RelationOptions } from "../lib/orientation/runtime.ts";
 import { encodeBootstrap, orientedTitle, type Bootstrap } from "../lib/orientation/state.ts";
 import { navigationHints } from "../lib/orientation/hints.ts";
 import {
 	buildContextualTabTitle,
 	buildPiCommand,
+	formatTabTitle,
+	getCallerInfo,
 	openCommandInNewSplit,
 	openCommandInNewTab,
 	openCommandInNewWorkspace,
@@ -49,29 +54,51 @@ export function describePiPlacement(placement: PiPlacement): string {
 // The optional check must be side-effect-free: helpers repeat it at dispatch boundaries.
 export async function openPiSession(pi: ExtensionAPI, cwd: string, options: PiLaunchOptions, fallbackTitle = "Pi", beforeLaunch?: (seed: Bootstrap | undefined) => void) {
 	validatePiLaunchOptions(options);
-	const placement = options.placement ?? "workspace";
-	const topic = await buildContextualTabTitle(pi, cwd, options.title || options.prompt, fallbackTitle);
-	const seed = prepareOrientation(pi, options, topic);
-	const checkLaunch = () => {
-		const origin = seed?.origin, own = origin && currentConversation(pi);
-		if (origin && (!own || own.state.sessionId !== origin.sessionId || own.state.conversationId !== origin.conversationId
-			|| own.state.taskId !== origin.taskId || own.target.surfaceId !== origin.target.surfaceId)) throw new Error("Launch origin binding changed");
-		beforeLaunch?.(seed);
-	};
-	checkLaunch();
-	const title = seed ? orientedTitle(seed, topic) : topic;
-	const command = buildPiCommand(cwd, { ...options, orientationBootstrap: seed && encodeBootstrap(seed), provider: options.provider?.trim(), model: options.model?.trim() });
-	const focus = options.focus ?? true;
-	const result = placement === "workspace"
-		? await openCommandInNewWorkspace(pi, cwd, command, { title, focus, checkLaunch })
-		: placement === "tab"
-			? await openCommandInNewTab(pi, command, { tabTitle: title, focus, checkLaunch })
-			: await openCommandInNewSplit(pi, placement, command, { tabTitle: title, focus, checkLaunch });
-	if (!result.ok) return result;
-	return {
-		ok: true as const,
-		placement, cwd, title,
-		workspaceRef: result.workspaceRef, surfaceRef: result.surfaceRef, source: result.source, created: result.created,
-		orientation: seed, navigation: navigationHints(seed),
-	};
+	const launch = capturePiLaunch(pi, cwd);
+	try {
+		const placement = options.placement ?? "workspace";
+		if (launch.ticket && placement === "workspace") throw new Error("SSH Pi workspace creation is unsupported; request a local tab or split");
+		if (launch.ticket && options.role === "continue") throw new Error("SSH handoffs are unsupported");
+		launch.check();
+		const protectedLaunch = !!getSshTargetRuntime(pi);
+		if (protectedLaunch) {
+			const caller = await getCallerInfo(pi); launch.check();
+			if (!caller.ok) throw new Error(caller.error);
+			await assertLocalWorkspace(pi, caller.caller); launch.check();
+		}
+		const topic = launch.ticket ? formatTabTitle(options.title || options.prompt, fallbackTitle)
+			: await buildContextualTabTitle(pi, cwd, options.title || options.prompt, fallbackTitle);
+		launch.check();
+		const seed = prepareOrientation(pi, options, topic);
+		const checkLaunch = () => {
+			launch.check();
+			const origin = seed?.origin, own = origin && currentConversation(pi);
+			if (origin && (!own || own.state.sessionId !== origin.sessionId || own.state.conversationId !== origin.conversationId
+				|| own.state.taskId !== origin.taskId || own.target.surfaceId !== origin.target.surfaceId)) throw new Error("Launch origin binding changed");
+			beforeLaunch?.(seed);
+		};
+		checkLaunch();
+		const title = seed ? orientedTitle(seed, topic) : topic;
+		const command = withSshLaunchEnvironment(buildPiCommand(cwd, { ...options, orientationBootstrap: seed && encodeBootstrap(seed), provider: options.provider?.trim(), model: options.model?.trim() }),
+			launch.ticket ? encodeSshLaunch(launch.ticket, options.sessionFile) : undefined);
+		const focus = options.focus ?? true;
+		const protectedOptions = protectedLaunch ? { localOnly: true, beforeEffect: async (source: Parameters<typeof assertLocalWorkspace>[1]) => {
+			checkLaunch(); await assertLocalWorkspace(pi, source); checkLaunch();
+		} } : {};
+		const result = placement === "workspace"
+			? await openCommandInNewWorkspace(pi, cwd, command, { title, focus, checkLaunch })
+			: placement === "tab"
+				? await openCommandInNewTab(pi, command, { tabTitle: title, focus, checkLaunch, ...protectedOptions })
+				: await openCommandInNewSplit(pi, placement, command, { tabTitle: title, focus, checkLaunch, ...protectedOptions });
+		if (result.ok && launch.ticket) {
+			try { checkLaunch(); } catch { throw new Error("Pi creation outcome is uncertain after context change; Pi may have started. Do not retry automatically"); }
+		}
+		if (!result.ok) return result;
+		return {
+			ok: true as const,
+			placement, cwd, title,
+			workspaceRef: result.workspaceRef, surfaceRef: result.surfaceRef, source: result.source, created: result.created,
+			orientation: seed, navigation: navigationHints(seed),
+		};
+	} finally { launch.close(); }
 }

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { once } from "node:events";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import { isAbsolute, join } from "node:path";
 import { test } from "node:test";
@@ -9,6 +9,7 @@ import { promisify } from "node:util";
 import { buildPiCommand, buildShellCommand, openCommandInNewWorkspace, openCommandInNewSplit, openCommandInNewTab } from "../extensions/cmux-core.ts";
 import { MessageClient, METHODS } from "../lib/messaging/client.ts";
 import { makeEnvelope } from "../lib/messaging/protocol.ts";
+import { childBootstrap, encodeBootstrap } from "../lib/orientation/state.ts";
 
 // Opt in with an absolute CLI path. Default CI never needs cmux or a running app.
 const cli = process.env.PI_CMUX_TEST_CLI;
@@ -40,7 +41,7 @@ async function fakeCli(t, options = {}) {
 	// Keep the Unix socket path short even on macOS. HOME is isolated too.
 	const root = await mkdtemp("/tmp/pc-contract-");
 	const socketPath = join(root, "socket");
-	const requests = [];
+	const requests = [], requestLines = [];
 	const calls = [];
 	const failures = [];
 	const sockets = new Set();
@@ -60,6 +61,7 @@ async function fakeCli(t, options = {}) {
 				try {
 					request = JSON.parse(line);
 					requests.push(request);
+					requestLines.push(line);
 					let result;
 					switch (request.method) {
 						case "system.capabilities": result = { methods: METHODS }; break;
@@ -139,15 +141,16 @@ async function fakeCli(t, options = {}) {
 			return result;
 		},
 	};
-	return { root, pi, requests, calls, requestsFor: (method) => requests.filter((request) => request.method === method) };
+	return { root, pi, requests, requestLines, calls, requestsFor: (method) => requests.filter((request) => request.method === method) };
 }
 
 for (const focus of [undefined, true, false]) {
 	test(`installed cmux: workspace launch targets returned IDs, focus=${focus}`, contract, async (t) => {
 		const h = await fakeCli(t);
 		let command;
-		const previousPath = process.env.PATH;
+		const previousPath = process.env.PATH, previousMode = process.env.PI_CMUX_PI_PATH_MODE;
 		try {
+			process.env.PI_CMUX_PI_PATH_MODE = "full"; // Compatibility fixture uses a synthetic PATH.
 			process.env.PATH = "/contract/bin:/usr/bin:/bin";
 			command = focus === false
 				? buildShellCommand(CWD, "printf '%s' 'contract only; never executed'")
@@ -155,6 +158,8 @@ for (const focus of [undefined, true, false]) {
 		} finally {
 			if (previousPath === undefined) delete process.env.PATH;
 			else process.env.PATH = previousPath;
+			if (previousMode === undefined) delete process.env.PI_CMUX_PI_PATH_MODE;
+			else process.env.PI_CMUX_PI_PATH_MODE = previousMode;
 		}
 		const opened = await openCommandInNewWorkspace(h.pi, CWD, command, { title: TITLE, focus });
 		assert.equal(opened.ok, true);
@@ -164,7 +169,7 @@ for (const focus of [undefined, true, false]) {
 		assert.equal(opened.created?.surface_id, SURFACE, "return setup needs the actual CLI's full surface UUID, not just its ref");
 		assert.equal(opened.created?.workspace_id, WORKSPACE);
 		assert.deepEqual(h.calls.map(({ args }) => args.slice(0, args[0] === "--json" ? (args[1] === "--id-format" ? 5 : 3) : 1)), [
-			["--json", "identify"], ["--json", "--id-format", "both", "workspace", "create"], ["rename-tab"], ["respawn-pane"],
+			["--json", "--id-format", "both", "identify"], ["--json", "--id-format", "both", "workspace", "create"], ["rename-tab"], ["respawn-pane"],
 		]);
 		assert.deepEqual(h.requestsFor("workspace.create").map(({ params }) => params), [{
 			window_id: WINDOW, cwd: CWD, title: TITLE, focus: focus ?? true,
@@ -186,6 +191,33 @@ for (const focus of [undefined, true, false]) {
 		assert.ok(h.requests.indexOf(renames[0]) < h.requests.indexOf(respawns[0]), "the installed CLI must initialize the title before starting the child");
 	});
 }
+
+test("installed cmux: default minimal Pi PATH keeps a representative request below 4 KiB on an isolated socket", contract, async t => {
+ const h = await fakeCli(t), piDir = join(h.root, "pi's bin"), nodeDir = join(h.root, "node bin");
+ await mkdir(piDir); await mkdir(nodeDir);
+ await writeFile(join(piDir, "pi"), "#!/bin/sh\nexit 99\n", { mode: 0o755 });
+ await symlink(process.execPath, join(nodeDir, "node"));
+ const previousPath = process.env.PATH, previousMode = process.env.PI_CMUX_PI_PATH_MODE;
+ let command;
+ try {
+  process.env.PATH = `${piDir}:${nodeDir}:/unused-parent-${"x".repeat(1500)}`;
+  delete process.env.PI_CMUX_PI_PATH_MODE;
+  const seed = childBootstrap({ version: 1, sessionId: SOURCE_SURFACE, taskId: WINDOW, conversationId: SOURCE_WORKSPACE, role: "main", topic: "Pi" },
+   { windowId: WINDOW, workspaceId: SOURCE_WORKSPACE, paneId: PANE, surfaceId: SOURCE_SURFACE }, true, "review", "SSH review");
+  command = buildPiCommand(CWD, { orientationBootstrap: encodeBootstrap(seed), provider: "test", model: "test/model", thinking: "high", prompt: "Synthetic review only. " + "x".repeat(600) });
+ } finally {
+  if (previousPath === undefined) delete process.env.PATH; else process.env.PATH = previousPath;
+  if (previousMode === undefined) delete process.env.PI_CMUX_PI_PATH_MODE; else process.env.PI_CMUX_PI_PATH_MODE = previousMode;
+ }
+ const result = await openCommandInNewWorkspace(h.pi, CWD, command, { title: TITLE, focus: false });
+ assert.equal(result.ok, true);
+ assert.equal(h.requestsFor("surface.respawn").length, 1);
+ const line = h.requestLines.find(raw => JSON.parse(raw).method === "surface.respawn");
+ assert.ok(Buffer.byteLength(line + "\n") < 4096);
+ assert.ok(!line.includes("unused-parent-"));
+ assert.equal(JSON.parse(line).params.tmux_start_command, command);
+ assert.ok(command.includes('${PATH:+:"$PATH"}'), "expand native PATH at child execution, not CLI serialization");
+});
 
 for (const placement of ["right", "down", "tab"]) {
  test(`installed cmux: ${placement} creation retains full UUID and short ref`, contract, async t => {

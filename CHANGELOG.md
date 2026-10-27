@@ -4,22 +4,27 @@
 
 ### Added
 
-- Experimental peer messaging with nonblocking send/reply, read-only inbox inspection, and opt-in `cmux_start_pi.returnResults` for automatic findings return. Findings use best-effort follow-ups, not steering, and may incur model usage.
-- Topic-first tab titles, shared task markers for related chats, and origin links without copying conversation history.
-- `/cmbk` and configurable **Ctrl+Alt+B** to return to the exact originating conversation, including after tab moves.
-- `cmux_start_pi.cwd` to start fresh Pi sessions in another directory.
-- `PI_CMUX_SIDEBAR_MODE=minimal` for live tokens without package logs/progress, with token opt-out and optional cost display.
+- Experimental SSH execution with explicit target selection, conversational connect, bounded discovery and separately confirmed alias saving. Pi/storage remain local; non-ready remote intent never falls back locally. Resume/children restore configured-only selection.
+- Related chat identities, topic-first titles, origin links and `/cmbk` with configurable shortcut.
+- Experimental peer messaging and opt-in delegated findings return. Delivery is best-effort follow-up, may incur model usage and grants no fix authority.
+- `cmux_start_pi.cwd` for fresh sessions in another directory; minimal sidebar mode.
 
 ### Changed
 
-- Require Pi **1.3.0 or newer**, including the executable on `PATH`.
+- Default local Pi launches to minimal PATH: resolve Pi/Node directories and invoke absolute Pi. `PI_CMUX_PI_PATH_MODE=full` preserves caller PATH; both modes propagate.
+- Use compact orientation bootstraps and shorter return instructions. Legacy input/persisted entries remain supported; children need updated code. No universal launch-size guarantee.
+- Protect bundled Pi tabs/splits and helper creation with local-context RPCs, verified locality and exact UUIDs. Refuse unsupported remote-owned placement without retry. Local sidebar workspaces retain create + respawn.
+- Require Pi **1.3.0+**, including the executable on PATH.
 
 ### Fixed
 
-- Reject stale runtime ownership before scheduling findings, preparing launches, or renaming tabs.
-- Recheck pending launch cancellation before creation and child startup; report already-created surfaces without automatic retry or cleanup.
-- Preserve full creation UUIDs alongside short refs so automatic return setup can identify the correct child.
-- Include `lib/` in local installs so runtime imports resolve.
+- Abort revoked SSH grants; commit readiness only under current authority. Frame file replies to reject stdout contamination; malformed mutation acknowledgements remain uncertain without replay. Remote file operations require POSIX `wc`.
+- Recheck launch/runtime ownership and cancellation; preserve creation UUIDs; normalize native UUID case and permit neutral model/thinking startup metadata.
+- Include `lib/` in local installs.
+
+### Documentation
+
+- Condense usage and SSH references; correct startup naming, login-shell and validation claims. Native evidence remains limited to historical ordinary-local-workspace tabs and post-fix clean SSH core operations; other layouts/fault injection and latest launch-size changes lack native validation.
 
 ## [0.1.24] - 2026-09-28
 

@@ -96,7 +96,7 @@ function harness(t, options = {}) {
 
 test("bundle advertises browser, terminal, and Pi tools and registers /cmn, not /cmc", (t) => {
 	const h = harness(t, { extension: piCmuxExtension });
-	assert.deepEqual([...h.tools.keys()].sort(), ["cmux_annotate_browser", "cmux_message_inbox", "cmux_message_send", "cmux_open_browser", "cmux_open_terminal", "cmux_start_pi"]);
+	assert.deepEqual([...h.tools.keys()].sort(), ["bash", "cmux_annotate_browser", "cmux_message_inbox", "cmux_message_send", "cmux_open_browser", "cmux_open_terminal", "cmux_start_pi", "edit", "read", "ssh_alias_save", "ssh_connect", "ssh_discover", "write"]);
 	assert.ok(h.commands.has("cmmsg"));
 	assert.ok(h.commands.has("cmb"));
 	assert.ok(h.commands.has("cmba"));

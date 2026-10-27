@@ -4,6 +4,10 @@ import { normalizeBrowserOptions, type BrowserOpenOptions } from "../lib/browser
 import { AnnotationManager } from "../lib/browser/annotation-manager.ts";
 import { CmuxAnnotationTransport } from "../lib/browser/transport.ts";
 import { BrowserLifecycle } from "../lib/browser/lifecycle.ts";
+import { assertNoSshWorkflow } from "../lib/ssh/launch.ts";
+import { getSshTargetRuntime } from "../lib/ssh/runtime.ts";
+import { getCallerInfo } from "./cmux-core.ts";
+import { assertLocalWorkspace } from "../lib/ssh/terminal.ts";
 
 const USAGE = "Usage: /cmb [--down] [--focus] <url>";
 const PARAMETERS = {
@@ -44,6 +48,24 @@ export default function cmuxBrowserExtension(
 	createLifecycle: LifecycleFactory = (api, removed) => new BrowserLifecycle(api, removed),
 ) {
 	const bindings = new BrowserBindings();
+	const openLocalBrowser = async (ctx: ExtensionContext, options: BrowserOpenOptions, signal?: AbortSignal) => {
+		// Native SSH/relay/mirror preview routing has no live backend evidence yet.
+		// Do not touch existing bindings, bridges or page drafts on refusal.
+		assertNoSshWorkflow(pi, "browser opening");
+		const runtime = getSshTargetRuntime(pi), controller = new AbortController();
+		const unsubscribe = runtime?.subscribe(() => controller.abort());
+		try {
+			if (runtime) {
+				const caller = await getCallerInfo(pi, controller.signal);
+				controller.signal.throwIfAborted();
+				if (!caller.ok) throw new Error(caller.error);
+				await assertLocalWorkspace(pi, caller.caller);
+				controller.signal.throwIfAborted();
+			}
+			return await bindings.open(pi, ctx.sessionManager.getSessionId(), options,
+				signal ? AbortSignal.any([signal, controller.signal]) : controller.signal);
+		} finally { unsubscribe?.(); }
+	};
 	const removed = (binding: BrowserBinding) => {
 		if (!bindings.remove(binding)) return;
 		annotations.forget(binding.surfaceId);
@@ -154,7 +176,7 @@ export default function cmuxBrowserExtension(
 			}
 			try {
 				const generation = annotationGeneration;
-				const binding = await bindings.open(pi, ctx.sessionManager.getSessionId(), options);
+				const binding = await openLocalBrowser(ctx, options);
 				const annotationStatus = prepareAnnotations(binding, ctx, generation);
 				ctx.ui.notify(`Opened browser ${binding.surfaceRef ?? binding.surfaceId} in a ${binding.placement === "right" ? "right" : "lower"} split. ${annotationStatus}`, "info");
 			} catch (error) {
@@ -178,7 +200,7 @@ export default function cmuxBrowserExtension(
 		executionMode: "sequential",
 		async execute(_toolCallId, params, signal, _onUpdate, ctx) {
 			const generation = annotationGeneration;
-			const binding = await bindings.open(pi, ctx.sessionManager.getSessionId(), params as BrowserOpenOptions, signal);
+			const binding = await openLocalBrowser(ctx, params as BrowserOpenOptions, signal);
 			const annotationStatus = prepareAnnotations(binding, ctx, generation);
 			return {
 				content: [{ type: "text", text: `Opened browser ${binding.surfaceRef ?? binding.surfaceId} in a ${binding.placement === "right" ? "right" : "lower"} split, bound to this Pi session. ${annotationStatus} Page-control interaction tools are not implemented yet.` }],

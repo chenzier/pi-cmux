@@ -29,6 +29,15 @@ test('authorized fresh launch embeds exact return route and grants only that chi
  await h.messaging.worker.tick();assert.equal(h.messages.length,0,'launch is not readiness; unknown child binding cannot deliver');
  h.peers.set(peer.surfaceId,peer);await h.messaging.worker.tick();assert.equal(h.messages.length,1);assert.equal(h.messages[0].message.customType,FOLLOWUP_CONTEXT);assert.deepEqual(h.messages[0].delivery,{triggerTurn:true,deliverAs:'followUp'});assert.equal(h.queue.length,1);
 });
+test('automatic return instructions stay compact without dropping routing or delivery limits',async t=>{
+ const h=await setup(t),result=await h.invoke({returnResults:true,role:'review',prompt:'Review only; do not edit',focus:false});
+ const command=h.calls.find(c=>c.args[0]==='respawn-pane').args.at(-1),start=command.indexOf('\n\n[Host result return]\n');
+ assert.ok(start>=0,'host return instructions must be separate from the task');
+ const suffix=command.slice(start);
+ assert.ok(Buffer.byteLength(suffix,'utf8')<=460,'bound appended instructions, not the whole launch request');
+ assert.ok(suffix.includes(`target ${h.location.surfaceId}`));assert.ok(suffix.includes(`requestId ${result.details.automaticReturn.requestId}`));
+ for(const text of ['On completion, cmux_message_send','kind result','concise findings with report paths/limits','Questions only if blocked on this task','optional progress stays quiet','Expires in 30 min or on parent abort/session change','Do not wait for replies, auto-retry unknown sends, launch workers or expand scope','Queued is not processing confirmation'])assert.ok(suffix.includes(text),text);
+});
 test('findings from different launched peers coalesce without granting unrelated traffic authority',async t=>{
  let count=0;const h=await setup(t,{exec:async(_cmd,args)=>args.includes('create')?{code:0,killed:false,stdout:JSON.stringify({workspace_ref:'workspace:2',surface_ref:`surface:${++count+1}`,surface_id:randomUUID()})}:undefined});
  const a=await h.invoke({returnResults:true,prompt:'Review A',focus:false}),b=await h.invoke({returnResults:true,prompt:'Review B',focus:false});await h.messaging.worker.tick();

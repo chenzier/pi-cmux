@@ -5,6 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { type SplitDirection } from "./cmux-core.ts";
 import { openPiSession } from "./cmux-pi.ts";
+import { capturePiLaunch, hasSshIntent } from "../lib/ssh/launch.ts";
 
 const ZOXIDE_TIMEOUT_MS = 5000;
 const MAX_COMPLETIONS = 10;
@@ -92,12 +93,14 @@ async function openPiInZoxideSplit(
 	direction: SplitDirection,
 	commandName: string,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-	const targetResult = await resolveZoxideTarget(pi, query, ctx.cwd, commandName);
-	if (!targetResult.ok) {
-		return targetResult;
-	}
-
-	return openPiSession(pi, targetResult.path, { placement: direction, title: "Pi" });
+	if (hasSshIntent(pi)) return { ok: false, error: "SSH zoxide workflows are unsupported; no local paths or zoxide were inspected" };
+	const launch = capturePiLaunch(pi, ctx.cwd);
+	try {
+		const targetResult = await resolveZoxideTarget(pi, query, ctx.cwd, commandName);
+		launch.check();
+		if (!targetResult.ok) return targetResult;
+		return await openPiSession(pi, targetResult.path, { placement: direction, title: "Pi" }, "Pi", () => launch.check());
+	} finally { launch.close(); }
 }
 
 function registerZoxideCommand(
@@ -110,6 +113,7 @@ function registerZoxideCommand(
 	pi.registerCommand(name, {
 		description,
 		getArgumentCompletions: (prefix) => {
+			if (hasSshIntent(pi)) return null;
 			const matches = getZoxideMatches(prefix);
 			return matches.length > 0 ? matches.map((match) => ({ value: match, label: match })) : null;
 		},

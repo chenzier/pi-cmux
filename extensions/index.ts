@@ -11,9 +11,11 @@ import cmuxAutotitleExtension from "./cmux-autotitle.ts";
 import { initI18n } from "./i18n.ts";
 import registerOrientation from "../lib/orientation/runtime.ts";
 import registerMessaging from "./cmux-messages.ts";
+import registerCmuxSsh from "./cmux-ssh.ts";
 
 export default function piCmuxExtensionBundle(pi: ExtensionAPI) {
 	initI18n(pi);
+	registerCmuxSsh(pi); // Consume one-shot target before orientation adds branch entries.
 	registerOrientation(pi);
 	cmuxNotifyExtension(pi);
 	cmuxSplitExtension(pi);

@@ -44,14 +44,18 @@ const piEntry = import.meta.resolve("@earendil-works/pi-coding-agent");
 const { parseArgs } = await import(new URL("./cli/args.js", piEntry).href);
 
 function withPath(path, callback) {
-	const previousPath = process.env.PATH;
+	const previousPath = process.env.PATH, previousMode = process.env.PI_CMUX_PI_PATH_MODE;
 	try {
+		// These cases verify the full-PATH compatibility opt-out.
+		process.env.PI_CMUX_PI_PATH_MODE = "full";
 		if (path === undefined) delete process.env.PATH;
 		else process.env.PATH = path;
 		return callback();
 	} finally {
 		if (previousPath === undefined) delete process.env.PATH;
 		else process.env.PATH = previousPath;
+		if (previousMode === undefined) delete process.env.PI_CMUX_PI_PATH_MODE;
+		else process.env.PI_CMUX_PI_PATH_MODE = previousMode;
 	}
 }
 
@@ -99,7 +103,7 @@ function captureLaunch(t, options, terminalPath) {
 	return { args: captured.args, parsed };
 }
 
-test("preserve caller PATH for Pi and Node when the terminal PATH is empty", (t) => {
+test("full mode preserves caller PATH for Pi and Node when the terminal PATH is empty", (t) => {
 	const { args } = captureLaunch(t, { prompt: "--help" }, "");
 	assert.deepEqual(args, ["--", "--help"]);
 });

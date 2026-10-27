@@ -49,14 +49,42 @@ export function parseOrientation(value: unknown, owner: string): Orientation | u
 	const v = object(value), seed = parseBootstrap(value);
 	return v?.sessionId === owner && seed ? { ...seed, sessionId: owner } : undefined;
 }
+// Wire v2: [2, taskId, conversationId, role, topic, origin | null].
+// Origin: [taskId | null (same as child), conversationId, role, sessionId,
+//          [windowId, workspaceId, paneId, surfaceId]]. Stored entries stay v1.
+function parseCompactBootstrap(value: unknown[]): Bootstrap | undefined {
+	if (value.length !== 6 || value[0] !== 2 || typeof value[3] !== "string") return undefined;
+	const [, taskId, conversationId, role, topic, parent] = value;
+	let origin: unknown;
+	if (parent !== null) {
+		if (!Array.isArray(parent) || parent.length !== 5 || typeof parent[2] !== "string") return undefined;
+		const [parentTaskId, parentConversationId, parentRole, sessionId, target] = parent;
+		if (!Array.isArray(target) || target.length !== 4) return undefined;
+		origin = {
+			taskId: parentTaskId === null ? taskId : parentTaskId, conversationId: parentConversationId, role: parentRole, sessionId,
+			target: { windowId: target[0], workspaceId: target[1], paneId: target[2], surfaceId: target[3] },
+		};
+	}
+	return parseBootstrap({ version: 1, taskId, conversationId, role, topic, ...(origin ? { origin } : {}) });
+}
 export function decodeBootstrap(raw: string): Bootstrap {
 	if (raw.length > 8192 || !/^[A-Za-z0-9_-]+$/.test(raw)) throw new Error("Invalid cmux orientation bootstrap");
 	let seed: Bootstrap | undefined;
-	try { seed = parseBootstrap(JSON.parse(Buffer.from(raw, "base64url").toString("utf8"))); } catch { /* invalid data */ }
+	try {
+		const value: unknown = JSON.parse(Buffer.from(raw, "base64url").toString("utf8"));
+		seed = Array.isArray(value) ? parseCompactBootstrap(value) : parseBootstrap(value);
+	} catch { /* invalid data */ }
 	if (!seed) throw new Error("Invalid cmux orientation bootstrap");
 	return seed;
 }
-export function encodeBootstrap(seed: Bootstrap): string { return Buffer.from(JSON.stringify(seed)).toString("base64url"); }
+export function encodeBootstrap(seed: Bootstrap): string {
+	const parsed = parseBootstrap(seed);
+	if (!parsed || typeof parsed.role !== "string" || (parsed.origin && typeof parsed.origin.role !== "string")) throw new Error("Invalid cmux orientation bootstrap");
+	const { taskId, conversationId, role, topic, origin } = parsed;
+	const parent = origin ? [origin.taskId === taskId ? null : origin.taskId, origin.conversationId, origin.role, origin.sessionId,
+		[origin.target.windowId, origin.target.workspaceId, origin.target.paneId, origin.target.surfaceId]] : null;
+	return Buffer.from(JSON.stringify([2, taskId, conversationId, role, topic, parent])).toString("base64url");
+}
 export function rootOrientation(owner: string): Orientation {
 	return { version: 1, sessionId: owner, taskId: randomUUID(), conversationId: randomUUID(), role: "main", topic: "Pi" };
 }

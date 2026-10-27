@@ -1,135 +1,105 @@
 # pi-cmux usage
 
-Run Pi inside cmux. See the [README](../README.md#install) for installation.
+Run Pi inside cmux. See [installation](../README.md#install).
 
 ## Commands
 
 | Task | Command |
 |---|---|
 | New sidebar chat | `/cmn <prompt>` |
-| New Pi split | `/cmv [prompt]` right, `/cmh [prompt]` below |
+| Pi right/below | `/cmv [prompt]`, `/cmh [prompt]` |
 | Return to origin | `/cmbk` or **Ctrl+Alt+B** |
-| Inspect/control peer messages | `/cmmsg inbox`, `/cmmsg status`, `/cmmsg on`, `/cmmsg off` |
-| Continue a task | `/cmcv [note]` right, `/cmch [note]` below |
-| Continue in a new worktree | `/cmcv -c <branch> [--from <ref>] [note]` |
-| Run a terminal command | `/cmo <command>` right, `/cmoh <command>` below, `/cmt <command>` in a tab |
-| Open a browser | `/cmb [--down] [--focus] <url>` |
-| Retry or stop annotations | `/cmba [surface]`, `/cmba off` |
-| Jump to a directory | `/cmz <query-or-path>` right, `/cmzh <query-or-path>` below |
+| Peer messages | `/cmmsg inbox`, `/cmmsg status`, `/cmmsg on`, `/cmmsg off` |
+| Continue right/below | `/cmcv [note]`, `/cmch [note]` |
+| Continue in worktree | `/cmcv -c <branch> [--from <ref>] [note]` |
+| Tool right/below/tab | `/cmo <cmd>`, `/cmoh <cmd>`, `/cmt <cmd>` |
+| Browser | `/cmb [--down] [--focus] <url>` |
+| Retry/stop annotations | `/cmba [surface]`, `/cmba off` |
+| Jump directory right/below | `/cmz <path-or-query>`, `/cmzh <path-or-query>` |
 
 Aliases: `/cmux-v` → `/cmv`, `/cmux-h` → `/cmh`, `/cmov` → `/cmo`, `/z` → `/cmz`, `/zh` → `/cmzh`.
 
+**Inspect failed opens before retrying:** creation may have succeeded. The package never retries creation automatically.
+
 ## Configuration
 
-Package settings go in `~/.pi/agent/settings.json` (or `$PI_CODING_AGENT_DIR/settings.json`) and `.pi/settings.json` in the project. Project settings override global settings. Run `/reload` after editing them.
+Settings go in `~/.pi/agent/settings.json` (or `$PI_CODING_AGENT_DIR/settings.json`) and project `.pi/settings.json`. Project settings override global settings; `/reload` applies changes.
 
-Set environment variables before starting Pi. Restart Pi after changing exports in another shell; `/reload` does not import that shell's environment.
+Set environment variables before starting Pi. `/reload` cannot import exports from another shell.
 
 ## Pi sessions
 
 ```text
 /cmn Investigate slow startup
 /cmv Review the auth flow
-/cmh Add tests
 /cmz ~/src/other-project
 ```
 
-These commands start fresh, independent chats. Directory jumps accept paths without zoxide; fuzzy queries require zoxide. Prompts are quoted, so `--help` remains prompt text. Inputs beginning with `@` retain Pi's file-input behavior.
+These start independent chats. Explicit paths need no zoxide; fuzzy queries do. Quoted prompts preserve leading dashes; `@` inputs retain Pi's file-input behavior.
 
-You can also ask Pi:
+Ask Pi to start a session to use `cmux_start_pi`. It accepts workspace/right/down/tab placement, title, focus, provider/model and thinking. `cwd` accepts existing absolute, relative or `~/…` directories; omission keeps the current directory. It cannot accompany `continueSession: true`. Sessions focus by default; `focus: false` opens in the background.
 
-```text
-Start a fresh Pi session in a right split in ~/src/other-project.
-Open a reviewer for this task in a right split.
+### Pi launch PATH
+
+Default `PI_CMUX_PI_PATH_MODE=minimal` resolves executable Pi/Node directories on caller PATH, invokes Pi by absolute path and prepends those directories to the child's own PATH. Relative entries resolve before changing cwd. Both PATH modes propagate to child Pi launches. Missing executables in minimal mode or an invalid mode stop creation without fallback.
+
+Other tools may resolve differently or be missing. To preserve caller PATH:
+
+```sh
+export PI_CMUX_PI_PATH_MODE=full
 ```
 
-The `cmux_start_pi` tool supports workspace, right, down, and tab placement, plus a title, focus control, model/provider, and thinking level. `cwd` accepts absolute, session-relative, and `~/…` paths and must name an existing directory. Omit it to keep the current directory. It cannot be combined with `continueSession: true`.
-
-New sessions focus by default; `focus: false` opens them in the background. They remain independent unless requested otherwise. Use `returnResults: true` for an explicit delegation with [automatic findings return](#peer-messaging-experimental).
-
-**If opening fails, inspect cmux before retrying:** a workspace or pane may already exist. Creation is never automatically retried.
+Local helpers retain caller PATH; remote SSH operations retain remote PATH. Aliases/functions are not copied. Workspace create + respawn and standalone legacy launches may run cmux login profiles before applying PATH. Compact launch data reduces payloads but does not guarantee compliance with [cmux 0.65.2's 4 KiB routing limit](https://github.com/manaflow-ai/cmux/issues/21222).
 
 ## Conversation orientation
 
-Tabs put the topic first, followed by the role and a short shared task tag:
+Tabs show topic, role and task tag: `Check login · review [ab12]`. Tags are labels, not unique targets.
 
-```text
-Authentication · main [ab12]
-Check login · review [ab12]
-```
-
-Detailed conversation markers stay in Pi status and metadata. The four-character tag is a visual hint, not a navigation target.
-
-| Launch option | Relationship and history |
+| Option | Relationship/history |
 |---|---|
-| Default fresh chat | Separate task group, no inherited history |
-| `related: true` | Same task, no inherited history |
-| `role: "review"` | Same-task reviewer, no inherited history |
+| Default | Independent task, fresh history |
+| `related: true` | Same task, fresh history |
+| `role: "review"` | Same-task reviewer, fresh history |
 | `continueSession: true`, `/cmcv`, `/cmch` | Same task with handoff context |
 
-`related: false` cannot be combined with review/continue roles or `continueSession: true`. Writing “review” in a slash-command prompt does not select a relationship automatically.
+`related: false` conflicts with review/continue. Writing “review” in a slash prompt does not select a role.
 
 ### Return to the exact conversation
 
-Use **`/cmbk`** or **Ctrl+Alt+B** in a child conversation to return to its immediate creator—even after switching sibling tabs or moving the origin between workspaces/windows. A reviewer of a reviewer returns to that reviewer, not the task root.
+`/cmbk` returns to the immediate creator, including after tab moves. It validates the live Pi identity; a native `cmux://` link only selects the tab and is limited to the current cmux run. Neither grants messaging or execution authority.
 
-Set `PI_CMUX_RETURN_KEY=ctrl+shift+y` to change the shortcut, or `off` to disable it. `/cmbk` remains available. Supported keys include letters, digits, arrows, Home/End, and F1–F12 with optional `ctrl`, `alt`, and `shift` modifiers.
-
-Handoffs and related chats show a navigation note with the origin link and return hint when they first start working. The launching LLM is also instructed to include that help in its confirmation. This does not copy extra history, rewrite the task, or wake an empty chat.
-
-Prefer `/cmbk` over the native `cmux://` link: the command checks the live Pi conversation; the link only selects the tab. Links are scoped to the current cmux run, not guaranteed across app restarts. Neither is a messaging channel.
+`PI_CMUX_RETURN_KEY` changes the shortcut; `off` disables it without removing `/cmbk`. Related/handoff chats receive an origin note without copying history or waking an empty chat. Stale, closed or repurposed origins report unavailable rather than selecting a substitute.
 
 ### Persistence and compatibility
 
-Reload/resume preserves the same session's identity. `/new` and other-session resume use their own metadata; `/fork` starts a new independent identity. Tree navigation follows the active branch. `/name` and automatic topic titles preserve the task marker.
-
-Closed, stale, inaccessible, or repurposed origins report “unavailable” rather than selecting another pane. After sleep, allow a few seconds for the live binding to renew. A root conversation has no origin.
-
-Orientation runs in bundled interactive Pi sessions and was tested with cmux **0.65.2**. Task-specific colored borders are not implemented; this package does not change cmux's global border settings. See the [design contract](pane-orientation-design.md) for lifecycle and targeting limits.
+Reload/resume preserves a session's identity. `/new`, another session and `/fork` use their own identities; tree navigation follows the active branch. `/name` changes the topic, not the task marker. After sleep, live bindings may need a few seconds to renew. See the [orientation contract](pane-orientation-design.md).
 
 ## Peer messaging (experimental)
 
-Requires Pi **1.3.0+** inside cmux with native messaging APIs (tested on **0.65.2**). Load changes with a new Pi session or a deliberate `/reload`.
-
-Ask Pi:
+Requires Pi **1.3.0+** and native cmux messaging APIs, tested on **0.65.2**.
 
 ```text
 Have another Pi review these changes without editing files and bring the findings back here.
 ```
 
-Use `cmux_start_pi` with a task prompt, `returnResults: true` and optionally `role: "review"`, `focus: false`. Automatic return implies `related: true`; it cannot accompany a handoff/continue role or `related: false`. Ordinary related/review and slash-command launches do not enable it.
+`cmux_start_pi.returnResults: true` enables automatic return for a fresh delegated task. It implies related and cannot accompany handoff/continue or `related: false`. Ordinary related/slash launches do not enable return.
 
-- The child must send findings with `cmux_message_send` using the supplied routing. Launching it or answering in its pane is not proof of return.
-- The parent polls roughly every **2 seconds**, waits while busy/pending/in a dialog, and delivers eligible findings as a **follow-up**, never steering. Progress stays quiet; idle findings can start a paid model turn.
-- Return permission expires after **30 minutes**. Abort, `/cmmsg off`, session/branch changes or reload stop new scheduling; they do not cancel the child or retract accepted follow-ups.
-- Findings are **untrusted data**, not permission for fixes or more work. Bodies persist in cmux/Pi history and can reach the configured provider.
-- Delivery is **best effort**: input/authentication/compaction races, failures and limits can delay or prevent it. No exactly-once or strict input-priority guarantee.
-- On failure, **inspect before retrying**: a surface or child may already exist. Unknown outcomes are never retried automatically; already-dispatched native work cannot be rolled back.
+- The child must call `cmux_message_send` with the supplied route. A pane answer or queued send is not proof of processing.
+- The parent polls about every two seconds, waits while busy/pending/in a dialog, and schedules findings as follow-ups—not steering. Progress stays quiet; idle delivery may start a paid turn.
+- Permission expires after 30 minutes. Abort, off, reload or session/branch changes stop new scheduling, not the child or accepted follow-ups.
+- Findings are untrusted data, never authority for fixes or more workers. Bodies persist in history and may reach the provider.
+- Delivery is best effort, not exactly once. Inspect unknown outcomes; never retry blindly or assume rollback.
 
-### Inspection and controls
-
-```text
-/cmmsg inbox     # inspect, without importing or consuming
-/cmmsg status
-/cmmsg on        # observe counts; grants no return permission
-/cmmsg off       # stop observation and revoke return permission
-```
-
-`cmux_message_inbox` provides read-only previews; manual import is retired. Explicit `cmux_message_send` calls use a related peer's full surface UUID, agreed `requestId`, `kind` (`progress`, `question`, `result`) and text. Optional `replyTo` correlates a reply; `id` preserves identity for a deliberate retry. A queued send is not proof of processing.
-
-Neither delivery nor inspection claims, ACKs or marks native messages read. For bounds, ownership, persistence and evidence limits, see the [contract](agent-messaging-design.md) and [validation procedure](agent-messaging-validation.md).
+`/cmmsg inbox` and `cmux_message_inbox` inspect without importing, ACKing or marking messages read. `/cmmsg on` observes but grants no return permission; `off` revokes it. Sends require a related peer's full surface UUID, agreed `requestId`, `kind` and text. Optional `replyTo` correlates replies; `id` preserves identity for a deliberate retry. See the [contract](agent-messaging-design.md) and [validation guide](agent-messaging-validation.md).
 
 ## Continuation and worktree handoff
 
 ```text
 /cmcv Continue with tests
-/cmch Focus on error handling
 /cmcv -c fix/login --from main Add login tests
 ```
 
-Same-checkout handoffs include a summary and, when available, the current conversation branch. New-worktree handoffs carry a summary, not the full history or uncommitted files. Both keep the source session open and share its task marker.
-
-Use `cmux_start_pi` with `continueSession: true` for an agent-started handoff; add `branch` and optional `fromRef` for a new branch worktree. Do not use `continueSession` for a fresh reviewer that should receive only your supplied prompt.
+Same-checkout handoffs include a summary and available conversation branch. Worktree handoffs carry a summary, not full history or uncommitted files. Both leave the source open. The tool equivalent is `continueSession: true`, optionally with `branch`/`fromRef`. Use a fresh reviewer instead when no history should transfer.
 
 ## Tool splits and tabs
 
@@ -139,130 +109,79 @@ Use `cmux_start_pi` with `continueSession: true` for an agent-started handoff; a
 /cmt k9s
 ```
 
-Or ask Pi to open a terminal program in a split or tab; it uses `cmux_open_terminal`. These terminals remain interactive rather than being captured as shell output.
+Or ask Pi to use `cmux_open_terminal`. Local helpers preserve caller PATH and run `/bin/sh -c`. They require a verified local workspace, creation capabilities and exact UUIDs; startup uses one local-context RPC. Naming is best-effort after creation, including protected Pi tabs/splits. Workspace/legacy Pi paths name before respawn. Creation is not command completion.
 
-Commands preserve the caller's `PATH` and run through an inner `/bin/sh -c`. cmux may wrap startup in a login shell, so profile side effects are still possible. Shell aliases/functions are not copied; request a specific shell when needed.
-
-Tabs use `<title> · <repo-or-directory>`; Pi tabs add their orientation marker. Initial naming happens before command startup, without a later parent rename.
+With a ready SSH target, helpers default to remote cwd/PATH. Use `/cmt --local k9s` or tool `target: "local"` for the Mac; `--remote` requires readiness. Non-ready remote intent never falls back locally. See [SSH usage](ssh.md) and [helper compatibility/evidence](ssh-terminal.md).
 
 ## Browser splits
 
 ```text
 /cmb http://localhost:3000
-/cmb --down https://example.com
-/cmb --focus file:///tmp/preview.html
+/cmb --down --focus file:///tmp/preview.html
 ```
 
-Browsers open to the right without taking focus. Use `--down` for a lower split or `--focus` to activate it. URLs must be absolute HTTP, HTTPS, or local `file://` URLs without embedded credentials; percent-encode spaces.
-
-Ask Pi to open a URL beside it to use `cmux_open_browser`. Opening confirms creation, not page readiness or HTTP success. If opening fails, inspect cmux before trying again.
+Default: right split, no focus change. URLs must be absolute HTTP/HTTPS/local-file URLs without credentials; encode spaces. `cmux_open_browser` confirms creation, not page readiness.
 
 ### Browser annotations
 
-1. Turn on **Annotate** in the browser; it starts off.
-2. Select an element, write a note, and choose **Send**.
-3. In Pi, review the preview and choose **Send to Pi**. Confirmation defaults to Cancel.
+1. Turn on **Annotate** (initially off), select an element and write a note.
+2. Choose **Send**, then confirm **Send to Pi** in Pi. Default is Cancel.
 
-Turning Annotate off restores normal browsing and retains the draft in the current document. Navigation can lose drafts. Up to four browsers can have active annotation bridges.
+Turning Annotate off keeps the draft; navigation can lose it. Up to four bridges can run. `/cmba [surface]` retries a bound browser; `off` stops bridges, not browsers. Retry does not switch the page toggle. Reload/session replacement/exit clears bindings; old panes remain open. Disable native Design Mode first; iframes are unsupported.
 
-```text
-/cmba             # retry the single bound browser
-/cmba surface:2   # retry a specific bound browser
-/cmba off         # stop all bridges; leave browsers open
-```
+**Privacy:** pages can inspect drafts or forge submissions. Approve only recognized notes. Delivery includes the comment, full URL/query/fragment, title, selector and up to 240 characters of selected text; form/editable content is excluded. No screenshot is taken. The shortened preview does not show every transmitted field.
 
-Retrying enables the bridge, not the page toggle. After `/reload`, session replacement, or Pi exit, old bindings are not restored; open a new browser with `/cmb`. Existing panes remain open. Turn off native Design Mode before using annotations; iframe annotations are not supported.
-
-**Privacy and trust:** the page can inspect drafts or forge submissions. Approve only notes you recognize, even on localhost. Delivery includes the full comment, page URL (including query/fragment), title, selector, and up to 240 characters of selected text; form/editable content is excluded. No screenshot is captured. Check for sensitive data—the Pi preview is shortened and does not show everything sent.
-
-Approval sends the note into Pi and can start a turn. “Queued in Pi” does not mean the model has processed it. There is no atomic protection against navigation or cancellation immediately before dispatch. Annotations do not provide model-facing page click/typing tools.
+Approval can start a Pi turn; queued is not processed. Navigation/cancellation can race dispatch. Annotations do not expose model click/typing tools.
 
 ## Conversation tab titles
 
-LLM-generated topics are **off by default**. Enable them with `PI_CMUX_AUTOTITLE=1`, or in Pi settings:
+Model-generated topics default to off. Enable `PI_CMUX_AUTOTITLE=1` or `"pi-cmux": { "autotitle": true }` in settings.
 
-```json
-{
-  "pi-cmux": {
-    "autotitle": true
-  }
-}
-```
+After successful settlement, a background request names the current tab using up to four recent user/assistant texts, 300 characters each. No images/tool messages are sent; provider charges may apply. `/name` takes priority. Successful titles persist; clearing `/name` permits automatic naming again. Runs only in interactive cmux sessions.
 
-After successful settlement, a background request names the current tab—not the workspace. It sends up to four recent user/assistant text messages, each limited to 300 characters, to the selected model provider and may incur charges. No images or tool messages are sent.
-
-`/name` takes priority. Successful titles persist across reload/resume without another request; session/branch changes restore their own naming state. Clearing `/name` allows automatic naming again. Naming only runs in interactive cmux sessions and does not block Pi.
-
-- `PI_CMUX_AUTOTITLE=0|1` overrides settings files.
-- `PI_CMUX_AUTOTITLE_DISABLED=1` always disables automatic topics, not stable orientation markers.
-- `PI_CMUX_AUTOTITLE_MODEL=provider/model` selects another model; an unknown model skips naming.
+| Variable | Effect |
+|---|---|
+| `PI_CMUX_AUTOTITLE=0|1` | Override settings |
+| `PI_CMUX_AUTOTITLE_DISABLED=1` | Disable automatic topics, not markers |
+| `PI_CMUX_AUTOTITLE_MODEL=provider/model` | Select a model; unknown models skip naming |
 
 ## Sidebar status/log
 
-`PI_CMUX_SIDEBAR_MODE` selects the package's output:
+Default `detailed` shows status, progress, tokens and logs. `minimal` shows status/tokens and configured flashes, without package logs/progress. Neither changes native previews/activity/branch/path or removes old logs.
 
-- **`detailed`** (default): status, progress, tokens, and logs.
-- **`minimal`**: status with live tokens and configured flashes; no package sidebar logs or progress.
-
-These settings do not hide cmux's native previews, branch, path, or activity, or remove existing logs. Set `PI_CMUX_SIDEBAR=0` to disable package sidebar integration; flash settings remain independent.
-
-```bash
-PI_CMUX_SIDEBAR_MODE=minimal
-PI_CMUX_SIDEBAR_TOKENS=0       # hide tokens
-PI_CMUX_SIDEBAR_COST=1         # show reported cost (default: off)
-PI_CMUX_SIDEBAR_FLASH=error    # all (default), error, disabled
-PI_CMUX_SIDEBAR_PROGRESS=0    # hide progress in detailed mode
-PI_CMUX_SIDEBAR_LOG_TOOLS=1   # log tool results (default: off)
-PI_CMUX_SIDEBAR_LOG_PROMPT=1  # log truncated prompts (default: off)
-PI_CMUX_SIDEBAR_FINAL_CLEAR_MS=2500
-```
+| Variable | Default / options |
+|---|---|
+| `PI_CMUX_SIDEBAR` | `1`; `0` disables package sidebar integration, not independent flash settings |
+| `PI_CMUX_SIDEBAR_MODE` | `detailed`, `minimal` |
+| `PI_CMUX_SIDEBAR_TOKENS` | `1`; `0` hides tokens |
+| `PI_CMUX_SIDEBAR_COST` | `0`; `1` shows reported cost |
+| `PI_CMUX_SIDEBAR_FLASH` | `all`, `error`, `disabled` |
+| `PI_CMUX_SIDEBAR_PROGRESS` | `1`; `0` hides progress |
+| `PI_CMUX_SIDEBAR_LOG_TOOLS` | `0`; `1` logs results |
+| `PI_CMUX_SIDEBAR_LOG_PROMPT` | `0`; `1` logs truncated prompts |
+| `PI_CMUX_SIDEBAR_FINAL_CLEAR_MS` | `2500` |
 
 ## Notifications
 
-Package notifications are **off by default** to avoid duplicating native cmux hook alerts. Opt in before starting Pi:
+Off by default. Set `PI_CMUX_NOTIFY_LEVEL` to `all`, `medium` (completion/error) or `low` (error). Notifications wait for settlement and normally require interactive Pi inside cmux. `PI_CMUX_NOTIFY_FORCE=1` bypasses that context guard, not the level.
 
-| `PI_CMUX_NOTIFY_LEVEL` | Notifications |
-|---|---|
-| `all` | Waiting, Task Complete, Error |
-| `medium` | Task Complete, Error |
-| `low` | Error only |
-| `disabled` | None (default) |
-
-Notifications run after Pi settles, normally only in interactive cmux sessions. `PI_CMUX_NOTIFY_FORCE=1` allows them outside that mode/surface guard but still requires an enabled level.
-
-Bodies summarize activity and errors. `PI_CMUX_NOTIFY_INCLUDE_RESPONSE=1` also includes up to 500 characters of the final response; leave it off if responses may contain sensitive text.
-
-Optional tuning: `PI_CMUX_NOTIFY_TITLE=Pi`, `PI_CMUX_NOTIFY_THRESHOLD_MS=15000`, and `PI_CMUX_NOTIFY_DEBOUNCE_MS=3000`.
+`PI_CMUX_NOTIFY_INCLUDE_RESPONSE=1` includes up to 500 response characters; leave off for sensitive conversations. Other settings: `PI_CMUX_NOTIFY_TITLE=Pi`, `PI_CMUX_NOTIFY_THRESHOLD_MS=15000`, `PI_CMUX_NOTIFY_DEBOUNCE_MS=3000`.
 
 ### Tool notification settings
 
-Enable exact tool names in Pi settings:
-
 ```json
-{
-  "pi-cmux": {
-    "notify": {
-      "tools": { "ask_user_question": true }
-    }
-  }
-}
+{ "pi-cmux": { "notify": { "tools": { "ask_user_question": true } } } }
 ```
 
-An enabled notification level is still required. Configured tools notify at any enabled level; bodies contain the tool name and optional path basename, not other arguments. A project entry of `{ "disabled": true }` removes a global entry. Invalid entries produce a warning.
+Requires an enabled notification level. Bodies contain the tool name and optional path basename, not arguments. Project `{ "disabled": true }` removes a global entry; invalid settings warn.
 
 ## Pluggable tool commands
-
-Define your own split shortcuts in Pi settings:
 
 ```json
 {
   "pi-cmux": {
     "commands": {
-      "edit": {
-        "run": "hx",
-        "acceptArgs": true,
-        "description": "Open Helix"
-      },
+      "edit": { "run": "hx", "acceptArgs": true },
       "dev": { "run": "npm run dev", "direction": "down" },
       "logs": "tail -f logs/app.log"
     }
@@ -270,12 +189,10 @@ Define your own split shortcuts in Pi settings:
 }
 ```
 
-Use `/edit src/auth.ts`, `/dev`, or `/logs`. Shortcuts default to a right split and use the same shell behavior as [tool terminals](#tool-splits-and-tabs).
-
-Object options: `run`, `acceptArgs`, `direction` (`right` or `down`), `title`, `description`, and `disabled`. Set `disabled: true` in project settings to remove a global shortcut. Command names cannot replace Pi or package commands, including `/cmbk`.
-
-For reviews, start a normal chat with your preferred review prompt or skill. Ask Pi to use `cmux_start_pi` with `role: "review"` for a related reviewer. No review tool or workflow is prescribed by this package.
+Use `/edit src/auth.ts`, `/dev` or `/logs`. Options: `run`, `acceptArgs`, `direction` (right/default or down), `title`, `description`, `target` (local/remote) and `disabled`. Omitted target follows helper defaults; forwarded arguments are program arguments, not locality flags. Project `disabled: true` removes a global shortcut. Names cannot replace Pi/package commands.
 
 ## Compatibility
 
-Workspace creation and browser opening were tested with cmux **0.64.25**; orientation with **0.65.2**. Older versions are not verified. The integrations target the calling terminal, not whichever pane happens to have focus. Failed or ambiguous targeting does not trigger automatic creation retries.
+Workspace/browser behavior was tested with cmux **0.64.25**; orientation and ordinary-local-workspace SSH helper/child tabs with **0.65.2**. Splits/other native layouts and the latest launch-size changes lack native validation; no minimum cmux version is certified for protected creation. Missing capabilities or ambiguous identity fail without retry/substitute placement.
+
+Bundled Pi tabs/splits use protected local-context creation. Local sidebar workspaces still use create + respawn; standalone legacy Pi paths can use discovery/respawn. These paths may run login profiles. Remote-owned layouts and SSH worktrees/handoffs/zoxide/new browser previews are refused. See [SSH limits](ssh.md#limits).

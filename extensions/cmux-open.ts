@@ -2,14 +2,11 @@ import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-a
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import {
-	buildContextualTabTitle,
-	buildShellCommand,
-	openCommandInNewSplit,
-	openCommandInNewTab,
-	type SplitDirection,
-} from "./cmux-core.ts";
+import type { SplitDirection } from "./cmux-core.ts";
 import { onI18nLocaleChanged, t, type I18nKey } from "./i18n.ts";
+import { openHelperTerminal, parseHelperArguments, type TerminalTarget } from "../lib/ssh/terminal.ts";
+import { getSshTargetRuntime } from "../lib/ssh/runtime.ts";
+import { hasSshIntent } from "../lib/ssh/launch.ts";
 
 const GLOBAL_SETTINGS_PATH = join(homedir(), ".pi", "agent", "settings.json");
 const SETTINGS_SECTION_NAME = "pi-cmux";
@@ -53,6 +50,7 @@ const RESERVED_COMMAND_NAMES = new Set([
 	"zh",
 	"cmcv",
 	"cmch",
+	"ssh-bind", "ssh-validate", "ssh-clear",
 ]);
 
 interface ConfiguredSplitCommandInput {
@@ -62,21 +60,24 @@ interface ConfiguredSplitCommandInput {
 	title?: string;
 	description?: string;
 	disabled?: boolean;
+	target?: TerminalTarget;
 }
 
 interface ConfiguredSplitCommand {
 	run: string;
 	acceptArgs: boolean;
 	direction: SplitDirection;
+	target?: TerminalTarget;
 	title?: string;
 	description: string;
 }
 
 type TerminalPlacement = SplitDirection | "tab";
 
-type OpenToolContext = Pick<ExtensionContext, "cwd">;
+type OpenToolContext = Pick<ExtensionContext, "cwd"> & Partial<Pick<ExtensionContext, "sessionManager" | "signal">>;
 
 interface CmuxOpenTerminalParams {
+	target?: TerminalTarget;
 	command: string;
 	placement?: TerminalPlacement;
 	title?: string;
@@ -88,6 +89,7 @@ const CMUX_OPEN_TERMINAL_PARAMETERS = {
 	additionalProperties: false,
 	required: ["command"],
 	properties: {
+		target: { type: "string", enum: ["local", "remote"], description: "Omit for the bound SSH project in SSH mode, otherwise local. Set local explicitly for the Mac. Remote requires a ready target." },
 		command: {
 			type: "string",
 			description: "Interactive terminal command to run, for example k9s, htop, lazygit, or npm run dev",
@@ -117,12 +119,9 @@ async function openToolInSplit(
 	args: string,
 	title?: string,
 	focus?: boolean,
-): Promise<{ ok: true } | { ok: false; error: string }> {
-	const command = args.trim();
-	return openCommandInNewSplit(pi, direction, buildShellCommand(ctx.cwd, command), {
-		tabTitle: await buildContextualTabTitle(pi, ctx.cwd, title ?? command, "Tool"),
-		focus,
-	});
+) {
+	const parsed = parseHelperArguments(args);
+	return openHelperTerminal(pi, ctx, { command: parsed.command, placement: direction, title, focus, target: parsed.target });
 }
 
 async function openToolInTab(
@@ -131,12 +130,9 @@ async function openToolInTab(
 	args: string,
 	title?: string,
 	focus?: boolean,
-): Promise<{ ok: true } | { ok: false; error: string }> {
-	const command = args.trim();
-	return openCommandInNewTab(pi, buildShellCommand(ctx.cwd, command), {
-		tabTitle: await buildContextualTabTitle(pi, ctx.cwd, title ?? command, "Tool"),
-		focus,
-	});
+) {
+	const parsed = parseHelperArguments(args);
+	return openHelperTerminal(pi, ctx, { command: parsed.command, placement: "tab", title, focus, target: parsed.target });
 }
 
 function registerOpenCommand(
@@ -298,12 +294,17 @@ function normalizeConfiguredSplitCommand(
 		return undefined;
 	}
 
+	if (config.target !== undefined && config.target !== "local" && config.target !== "remote") {
+		console.warn(`[pi-cmux] Skipping configured command /${commandName}: invalid target`);
+		return undefined;
+	}
 	const title = typeof config.title === "string" && config.title.trim().length > 0 ? config.title.trim() : undefined;
 
 	return {
 		run,
 		acceptArgs: config.acceptArgs === true,
 		direction,
+		target: config.target,
 		title,
 		description:
 			typeof config.description === "string" && config.description.trim().length > 0
@@ -349,7 +350,7 @@ function registerConfiguredSplitCommand(
 			}
 
 			const command = trimmedArgs.length > 0 ? `${config.run} ${trimmedArgs}` : config.run;
-			const result = await openToolInSplit(pi, ctx, config.direction, command, config.title ?? config.run);
+			const result = await openHelperTerminal(pi, ctx, { command, placement: config.direction, title: config.title ?? config.run, target: config.target });
 			if (result.ok) {
 				const location = config.direction === "right" ? "to the right" : "below";
 				ctx.ui.notify(`Opened /${commandName} split ${location}`, "info");
@@ -378,24 +379,23 @@ async function openTerminalCommand(
 	pi: ExtensionAPI,
 	ctx: OpenToolContext,
 	params: CmuxOpenTerminalParams,
-): Promise<{ ok: true; placement: TerminalPlacement; command: string } | { ok: false; error: string }> {
+) {
 	const command = typeof params.command === "string" ? params.command.trim() : "";
 	if (!command) {
-		return { ok: false, error: "Specify a command to open" };
+		return { ok: false as const, error: "Specify a command to open" };
 	}
 
+	if (params.placement !== undefined && !["right", "down", "tab"].includes(params.placement)) throw new Error("Invalid terminal placement");
 	const placement = normalizeTerminalPlacement(params.placement);
 	const title = params.title?.trim() || command;
 	const focus = params.focus ?? true;
-	const result = placement === "tab"
-		? await openToolInTab(pi, ctx, command, title, focus)
-		: await openToolInSplit(pi, ctx, placement, command, title, focus);
+	const result = await openHelperTerminal(pi, ctx, { command, placement, title, focus, target: params.target });
 
 	if (!result.ok) {
 		return result;
 	}
 
-	return { ok: true, placement, command };
+	return { ...result, ok: true as const, placement, command };
 }
 
 function registerAgentTerminalTool(pi: ExtensionAPI): void {
@@ -403,7 +403,7 @@ function registerAgentTerminalTool(pi: ExtensionAPI): void {
 		name: "cmux_open_terminal",
 		label: "Open cmux terminal",
 		description:
-			"Open an interactive terminal command in cmux as a right split, lower split, or new tab/surface. Use for user-requested TUIs, logs, dev servers, watches, or long-running terminal views.",
+			"Open an interactive terminal command in cmux as a right split, lower split, or tab. In SSH mode the default is the bound remote project; target=local explicitly uses the Mac. No ready target means remote is refused. Remote-owned/unverified workspace placement is unsupported. Creation is not command completion.",
 		promptSnippet:
 			"Open an interactive terminal command in cmux when the user asks for a tool or view in another pane, split, tab, or background terminal.",
 		promptGuidelines: [
@@ -412,23 +412,26 @@ function registerAgentTerminalTool(pi: ExtensionAPI): void {
 			"Use cmux_open_terminal for interactive TUIs like k9s, lazygit, htop, hunk, log tails, dev servers, or watches; do not use bash for these unless the user wants captured output.",
 			"Use cmux_start_pi for new Pi chats, agents, and handoffs instead of constructing Pi shell commands here.",
 			"Do not open terminals proactively with cmux_open_terminal without a user request.",
+			"In SSH mode omit target for the bound remote project; use target=local for an explicitly local helper. Never construct SSH wrappers yourself. Do not report terminal creation as command completion or retry an uncertain creation.",
 		],
 		parameters: CMUX_OPEN_TERMINAL_PARAMETERS as any,
 		executionMode: "sequential",
-		async execute(_toolCallId, rawParams, _signal, _onUpdate, ctx) {
+		async execute(_toolCallId, rawParams, signal, _onUpdate, ctx) {
 			const params = rawParams as CmuxOpenTerminalParams;
-			const result = await openTerminalCommand(pi, ctx, params);
+			const result = await openTerminalCommand(pi, { cwd: ctx.cwd, sessionManager: ctx.sessionManager,
+				signal: AbortSignal.any([...(signal ? [signal] : []), ...(ctx.signal ? [ctx.signal] : [])]) }, params);
 			if (!result.ok) {
 				throw new Error(result.error);
 			}
 
 			const location = getPlacementLabel(result.placement);
 			return {
-				content: [{ type: "text", text: `Opened ${result.command} in a cmux ${location}.` }],
+				content: [{ type: "text", text: `Opened ${result.command} in a cmux ${location} (${result.target}${result.destination ? ` ${result.destination}:${result.cwd}` : ""}). Creation is not command completion.` }],
 				details: {
 					command: result.command,
 					placement: result.placement,
-					cwd: ctx.cwd,
+					cwd: result.cwd, target: result.target, destination: result.destination,
+					workspaceRef: result.workspaceRef, surfaceRef: result.surfaceRef, created: result.created,
 				},
 			};
 		},
@@ -476,6 +479,21 @@ function registerConfiguredSplitCommands(pi: ExtensionAPI): void {
 }
 
 export default function cmuxOpenExtension(pi: ExtensionAPI) {
+	let unsubscribe: (() => void) | undefined;
+	const status = (_event: unknown, ctx: ExtensionContext) => {
+		unsubscribe?.(); unsubscribe = undefined;
+		const runtime = getSshTargetRuntime(pi);
+		if (!runtime) return;
+		const update = () => {
+			const snapshot = runtime.snapshot();
+			ctx.ui.setStatus("cmux-ssh", !hasSshIntent(pi) ? undefined
+				: t("ssh.status", { state: snapshot.state, target: snapshot.target ? `${snapshot.target.destination}:${snapshot.target.remoteCwd}` : "unavailable" }));
+		};
+		update(); unsubscribe = runtime.subscribe(update);
+	};
+	pi.on("session_start", status);
+	pi.on("session_tree", status);
+	pi.on("session_shutdown", () => { unsubscribe?.(); unsubscribe = undefined; });
 	registerOpenCommands(pi);
 	registerConfiguredSplitCommands(pi);
 	registerAgentTerminalTool(pi);

@@ -3,6 +3,7 @@ import { stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { resolve } from "node:path";
 import { resolveHandoffTarget } from "./cmux-continue.ts";
+import { capturePiLaunch } from "../lib/ssh/launch.ts";
 import { launchNavigationHint } from "../lib/orientation/hints.ts";
 import { messagingFor } from "../lib/messaging/runtime.ts";
 import {
@@ -130,58 +131,74 @@ export default function cmuxStartExtension(pi: ExtensionAPI) {
 			if (params.cwd !== undefined && params.continueSession) throw new Error("cwd cannot be combined with continueSession=true");
 			if (params.continueSession && params.related === false) throw new Error("continueSession requires related=true");
 			signal?.throwIfAborted();
-			let cwd = await resolveStartDirectory(params.cwd, ctx.cwd);
-			let sessionFile: string | undefined;
-			let prompt = params.prompt?.trim();
-			if (params.continueSession) {
-				// Capture the boundary before asynchronous repository inspection.
-				const leafId = getHandoffLeaf(ctx, toolCallId);
-				const result = await resolveHandoffTarget(pi, ctx, branch
-					? { mode: "worktree-create", branch, fromRef, note: prompt }
-					: { mode: "handoff", note: prompt }, leafId);
-				if (!result.ok) throw new Error(result.error);
-				({ cwd, sessionFile, prompt } = result.target);
-			}
-
-			const messaging = params.returnResults ? messagingFor(pi) : undefined;
-			if (params.returnResults && !messaging) throw new Error("Automatic results require the bundled messaging extension");
-			const ticket = messaging && await messaging.prepareReturn(ctx);
-			if (ticket) prompt = `${prompt}\n\n[Delegated result return — host-provided routing]\nAfter completing this task, use cmux_message_send with target ${ticket.owner.surfaceId}, requestId ${ticket.requestId}, kind result and a concise findings summary (include report paths/limitations). Send a question only if blocked within this task. Progress is optional and stays quiet. This return request expires after 30 minutes or parent abort/session change. Do not wait for a reply or automatically retry an unknown send. Do not launch more workers or expand the task. Native queued is not parent processing confirmation.\n[/Delegated result return]`;
-			const title = params.title?.trim() || (params.continueSession ? ctx.sessionManager.getSessionName() : undefined)
-				|| params.prompt?.trim() || (params.continueSession ? "Continue" : "Pi");
-			signal?.throwIfAborted();
-			const result = await openPiSession(pi, cwd, { ...params, sessionFile, prompt, title,
-				related: params.continueSession || params.returnResults ? true : params.related,
-				role: params.role ?? (params.continueSession ? "continue" : undefined),
-			}, "Pi", seed => {
+			const launch = capturePiLaunch(pi, ctx.cwd);
+			const sourceCwd = ctx.cwd, sourceSession = launch.ticket?.context.sessionId;
+			const check = () => {
 				signal?.throwIfAborted();
-				if (!ticket) return;
-				if (!seed) throw new Error("Automatic results require live orientation before launch");
-				messaging!.checkReturn(ticket, seed);
-			});
-			if (!result.ok) throw new Error(result.error);
-			let automaticReturn: { requestId: string; state: string; warning?: string } | undefined;
-			if (ticket) {
-				try {
-					signal?.throwIfAborted();
-					messaging!.registerReturn(ticket, result.created?.surface_id, result.orientation!);
-					automaticReturn = { requestId: ticket.requestId, state: "awaiting-live-child-binding" };
-				} catch (error) {
-					// Creation already succeeded: never report this as a safe-to-retry launch failure.
-					automaticReturn = { requestId: ticket.requestId, state: "not-configured", warning: `Child already launched. Do not relaunch automatically. ${error instanceof Error ? error.message : String(error)}` };
-				}
-			}
-			const location = describePiPlacement(result.placement);
-			return {
-				content: [{ type: "text", text: `Started ${params.continueSession ? "a handoff" : "a fresh Pi session"} in a new cmux ${location}: ${result.title}. Working directory: ${cwd}. The source session remains open.${automaticReturn ? `\nAutomatic return: ${JSON.stringify(automaticReturn)}. Findings use best-effort follow-up delivery, not steering.` : ""}${result.navigation ? `\n${launchNavigationHint(result.navigation)}` : ""}` }],
-				details: {
-					placement: result.placement, cwd, title: result.title, automaticReturn,
-					continueSession: params.continueSession ?? false, sessionFile,
-					workspaceRef: result.workspaceRef, surfaceRef: result.surfaceRef,
-					source: result.source, created: result.created, orientation: result.orientation,
-					navigation: result.navigation,
-				},
+				launch.check();
+				if (ctx.cwd !== sourceCwd || (sourceSession !== undefined && ctx.sessionManager.getSessionId() !== sourceSession)) throw new Error("Pi source session/cwd changed");
 			};
+			try {
+				check();
+				// Refuse before resolveStartDirectory can stat any explicit path, or handoff preparation reads Git/sessions.
+				if (launch.ticket && (params.cwd !== undefined || params.continueSession || params.role === "continue" || branch || fromRef)) throw new Error("SSH launches support omitted cwd fresh same-project sessions only; handoffs/worktrees and explicit cwd are unsupported");
+				if (launch.ticket && (params.placement ?? "workspace") === "workspace") throw new Error("SSH Pi workspace creation is unsupported; request a tab or split");
+				let cwd = await resolveStartDirectory(params.cwd, ctx.cwd);
+				check();
+				let sessionFile: string | undefined;
+				let prompt = params.prompt?.trim();
+				if (params.continueSession) {
+					// Capture the boundary before asynchronous repository inspection.
+					const leafId = getHandoffLeaf(ctx, toolCallId);
+					const result = await resolveHandoffTarget(pi, ctx, branch
+						? { mode: "worktree-create", branch, fromRef, note: prompt }
+						: { mode: "handoff", note: prompt }, leafId);
+					if (!result.ok) throw new Error(result.error);
+					({ cwd, sessionFile, prompt } = result.target);
+				}
+
+				check();
+				const messaging = params.returnResults ? messagingFor(pi) : undefined;
+				if (params.returnResults && !messaging) throw new Error("Automatic results require the bundled messaging extension");
+				const ticket = messaging && await messaging.prepareReturn(ctx);
+				check();
+				if (ticket) prompt = `${prompt}\n\n[Host result return]\nOn completion, cmux_message_send: target ${ticket.owner.surfaceId}, requestId ${ticket.requestId}, kind result; text concise findings with report paths/limits. Questions only if blocked on this task; optional progress stays quiet. Expires in 30 min or on parent abort/session change. Do not wait for replies, auto-retry unknown sends, launch workers or expand scope. Queued is not processing confirmation.`;
+				const title = params.title?.trim() || (params.continueSession ? ctx.sessionManager.getSessionName() : undefined)
+					|| params.prompt?.trim() || (params.continueSession ? "Continue" : "Pi");
+				signal?.throwIfAborted();
+				const result = await openPiSession(pi, cwd, { ...params, sessionFile, prompt, title,
+					related: params.continueSession || params.returnResults ? true : params.related,
+					role: params.role ?? (params.continueSession ? "continue" : undefined),
+				}, "Pi", seed => {
+					check();
+					if (!ticket) return;
+					if (!seed) throw new Error("Automatic results require live orientation before launch");
+					messaging!.checkReturn(ticket, seed);
+				});
+				if (!result.ok) throw new Error(result.error);
+				let automaticReturn: { requestId: string; state: string; warning?: string } | undefined;
+				if (ticket) {
+					try {
+						check();
+						messaging!.registerReturn(ticket, result.created?.surface_id, result.orientation!);
+						automaticReturn = { requestId: ticket.requestId, state: "awaiting-live-child-binding" };
+					} catch (error) {
+						// Creation already succeeded: never report this as a safe-to-retry launch failure.
+						automaticReturn = { requestId: ticket.requestId, state: "not-configured", warning: `Child already launched. Do not relaunch automatically. ${error instanceof Error ? error.message : String(error)}` };
+					}
+				}
+				const location = describePiPlacement(result.placement);
+				return {
+					content: [{ type: "text", text: `Started ${params.continueSession ? "a handoff" : "a fresh Pi session"} in a new cmux ${location}: ${result.title}. Working directory: ${cwd}. The source session remains open.${automaticReturn ? `\nAutomatic return: ${JSON.stringify(automaticReturn)}. Findings use best-effort follow-up delivery, not steering.` : ""}${result.navigation ? `\n${launchNavigationHint(result.navigation)}` : ""}` }],
+					details: {
+						placement: result.placement, cwd, title: result.title, automaticReturn,
+						continueSession: params.continueSession ?? false, sessionFile,
+						workspaceRef: result.workspaceRef, surfaceRef: result.surfaceRef,
+						source: result.source, created: result.created, orientation: result.orientation,
+						navigation: result.navigation,
+					},
+				};
+			} finally { launch.close(); }
 		},
 	});
 }

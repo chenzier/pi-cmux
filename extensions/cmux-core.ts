@@ -1,5 +1,6 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { basename } from "node:path";
+import { accessSync, constants, statSync } from "node:fs";
+import { basename, delimiter, dirname, resolve } from "node:path";
 import { uuid } from "../lib/orientation/state.ts";
 
 const CMUX_TIMEOUT_MS = 5000;
@@ -34,7 +35,7 @@ interface CmuxCallerInfo {
 	surface_ref?: string;
 }
 
-interface CmuxCallerContext extends CmuxCallerInfo {
+export interface CmuxCallerContext extends CmuxCallerInfo {
 	window_ref?: string;
 	workspace_ref: string;
 	surface_ref: string;
@@ -73,13 +74,13 @@ export interface OpenCommandInNewSplitOptions {
 	tabTitle?: string;
 	focus?: boolean;
 	checkLaunch?: () => void;
+	/** Read-only asynchronous locality check, followed by a synchronous ticket check. */
+	beforeEffect?: (source: CmuxCallerContext) => Promise<void>;
+	/** Single RPC create with local startup context; no legacy respawn/discovery fallback. */
+	localOnly?: boolean;
 }
 
-export interface OpenCommandInNewTabOptions {
-	tabTitle?: string;
-	focus?: boolean;
-	checkLaunch?: () => void;
-}
+export interface OpenCommandInNewTabOptions extends OpenCommandInNewSplitOptions {}
 
 function delay(ms: number): Promise<void> {
 	return new Promise((resolve) => {
@@ -117,10 +118,25 @@ export function shellEscape(value: string): string {
 	return `'${value.replace(/'/g, `'\\''`)}'`;
 }
 
-function buildCommandPrefix(cwd: string): string[] {
+function resolvePathExecutable(name: string): string {
+	for (const entry of process.env.PATH?.split(delimiter) ?? []) {
+		// Resolve relative/empty entries in the calling process, before the child cd.
+		const path = resolve(entry || ".", name);
+		try {
+			accessSync(path, constants.X_OK);
+			if (statSync(path).isFile()) return path;
+		} catch { /* continue through missing, broken or non-executable candidates */ }
+	}
+	throw new Error(`Minimal Pi PATH requires executable ${name} on the caller PATH`);
+}
+
+function buildCommandPrefix(cwd: string, minimalPiPath?: string): string[] {
 	const commandParts = ["cd", shellEscape(cwd), "&&"];
-	// cmux respawns from the app's environment, which may have a different PATH.
-	if (process.env.PATH !== undefined) {
+	if (minimalPiPath !== undefined) {
+		// Expand only the child's PATH. Do not add a cwd-searching empty entry.
+		commandParts.push(`PATH=${shellEscape(minimalPiPath)}\${PATH:+:"$PATH"}`, "PI_CMUX_PI_PATH_MODE=minimal");
+	} else if (process.env.PATH !== undefined) {
+		// Helpers and full-mode Pi launches preserve the caller PATH.
 		commandParts.push(`PATH=${shellEscape(process.env.PATH)}`);
 	}
 	commandParts.push("exec");
@@ -128,9 +144,14 @@ function buildCommandPrefix(cwd: string): string[] {
 }
 
 export function buildPiCommand(cwd: string, options?: PiCommandOptions): string {
-	const prefix = buildCommandPrefix(cwd);
+	const mode = process.env.PI_CMUX_PI_PATH_MODE?.trim().toLowerCase() || "minimal";
+	if (mode !== "full" && mode !== "minimal") throw new Error("PI_CMUX_PI_PATH_MODE must be full or minimal");
+	const executable = mode === "minimal" ? resolvePathExecutable("pi") : undefined;
+	const minimalPath = executable ? [...new Set([dirname(executable), dirname(resolvePathExecutable("node"))])].join(delimiter) : undefined;
+	const prefix = buildCommandPrefix(cwd, minimalPath);
+	if (mode === "full") prefix.splice(prefix.length - 1, 0, "PI_CMUX_PI_PATH_MODE=full");
 	if (options?.orientationBootstrap) prefix.splice(prefix.length - 1, 0, `PI_CMUX_ORIENTATION=${shellEscape(options.orientationBootstrap)}`);
-	const commandParts = [...prefix, "pi"];
+	const commandParts = [...prefix, executable ? shellEscape(executable) : "pi"];
 	if (options?.sessionFile) {
 		commandParts.push("--session", shellEscape(options.sessionFile));
 	}
@@ -235,7 +256,7 @@ export async function execCmux(pi: ExtensionAPI, args: string[], signal?: AbortS
 }
 
 export async function getCallerInfo(pi: ExtensionAPI, signal?: AbortSignal): Promise<{ ok: true; caller: CmuxCallerContext } | { ok: false; error: string }> {
-	const result = await execCmux(pi, ["--json", "identify"], signal);
+	const result = await execCmux(pi, ["--json", "--id-format", "both", "identify"], signal);
 	if (!result.ok) {
 		return { ok: false, error: result.error || "Failed to identify cmux caller" };
 	}
@@ -422,6 +443,48 @@ export async function openCommandInNewWorkspace(
 	return { ok: true, workspaceRef, surfaceRef, source: callerResult.caller, created: createdIds(result.stdout) };
 }
 
+async function openLocalCommandSurface(
+	pi: ExtensionAPI, source: CmuxCallerContext, placement: SplitDirection | "tab", command: string,
+	options: OpenCommandInNewSplitOptions,
+): Promise<CommandOpenResult> {
+	const windowId = uuid(source.window_id), workspaceId = uuid(source.workspace_id);
+	const surfaceId = uuid(source.surface_id), paneId = uuid(source.pane_id);
+	if (!windowId || !workspaceId || !surfaceId || !paneId) throw new Error("Local-only launch requires exact cmux caller UUIDs");
+	const method = placement === "tab" ? "surface.create" : "surface.split";
+	const caps = await execCmux(pi, ["--json", "rpc", "system.capabilities", "{}"]);
+	const methods = parseJson<{ methods?: unknown }>(caps.stdout)?.methods;
+	if (!caps.ok || caps.stdout.length > 1_048_576 || !Array.isArray(methods) || !methods.includes(method)) throw new Error("cmux local-context creation is unavailable; no launch attempted");
+	await options.beforeEffect?.(source);
+	options.checkLaunch?.();
+	let created: Record<string, unknown>;
+	try {
+		// initial_command and remote_context are one server-side operation. Never
+		// respawn a surface whose remote ownership might have changed after creation.
+		const result = await execCmux(pi, ["--json", "--id-format", "both", "rpc", method, JSON.stringify({
+			window_id: windowId, workspace_id: workspaceId, surface_id: surfaceId,
+			...(placement === "tab" ? { pane_id: paneId } : { direction: placement }),
+			type: "terminal", focus: options.focus ?? true, remote_context: "local",
+			initial_command: `/bin/sh -c ${shellEscape(command)}`,
+		})]);
+		if (!result.ok) throw new Error(result.error || "cmux creation failed");
+		if (result.stdout.length > 1_048_576) throw new Error("cmux creation response is too large");
+		const parsed = parseJson<Record<string, unknown>>(result.stdout);
+		if (!parsed || uuid(parsed.window_id) !== windowId || uuid(parsed.workspace_id) !== workspaceId
+			|| !uuid(parsed.surface_id) || uuid(parsed.surface_id) === surfaceId || !uuid(parsed.pane_id)
+			|| (placement === "tab" ? uuid(parsed.pane_id) !== paneId : uuid(parsed.pane_id) === paneId)
+			|| parsed.type !== "terminal") throw new Error("unexpected creation identity");
+		created = Object.fromEntries(["window_id", "workspace_id", "pane_id", "surface_id", "surface_ref", "type"]
+			.filter(key => typeof parsed[key] === "string").map(key => [key, parsed[key]]));
+		options.checkLaunch?.();
+	} catch (error) {
+		throw new Error(`cmux creation outcome may be uncertain; command may have started. Do not retry automatically. ${error instanceof Error ? error.message : "Creation failed"}`);
+	}
+	const surfaceRef = typeof created.surface_ref === "string" && /^surface:[1-9][0-9]*$/.test(created.surface_ref)
+		? created.surface_ref : uuid(created.surface_id)!;
+	await renameSurfaceTab(pi, workspaceId, uuid(created.surface_id)!, options.tabTitle);
+	return { ok: true, workspaceRef: source.workspace_ref, surfaceRef, source, created };
+}
+
 export async function openCommandInNewSplit(
 	pi: ExtensionAPI,
 	direction: SplitDirection,
@@ -433,6 +496,7 @@ export async function openCommandInNewSplit(
 		return callerResult;
 	}
 
+	if (options.localOnly) return openLocalCommandSurface(pi, callerResult.caller, direction, command, options);
 	const { workspace_ref: workspaceRef, surface_ref: surfaceRef } = callerResult.caller;
 	// Keep a pre-creation snapshot only for the legacy discovery fallback.
 	const beforePanesResult = await listPanes(pi, workspaceRef);
@@ -482,6 +546,7 @@ export async function openCommandInNewTab(
 		return callerResult;
 	}
 
+	if (options.localOnly) return openLocalCommandSurface(pi, callerResult.caller, "tab", command, options);
 	const { workspace_ref: workspaceRef, pane_ref: paneRef } = callerResult.caller;
 	if (!paneRef) {
 		return { ok: false, error: "This command must be run from inside a cmux pane" };
