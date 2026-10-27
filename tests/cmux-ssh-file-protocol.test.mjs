@@ -206,11 +206,14 @@ test("successful effects precede acknowledgement; shell and operation stdout are
 		const command = createFileCommand(operation, "/dev/null");
 		const stub = operation === "mkdir" ? 'mkdir() { printf EFFECT >&2; };'
 			: operation === "write" ? 'cat() { command cat; printf EFFECT >&2; };' : "";
-		const success = run(command, { before: stub, input });
+		// Only writes consume stdin. Other commands may exit before Node writes
+		// the unused bytes, producing a spurious EPIPE on Linux.
+		const stdin = operation === "write" ? input : Buffer.alloc(0);
+		const success = run(command, { before: stub, input: stdin });
 		assert.equal(success.status, 0);
 		assert.deepEqual(command.decode(success.stdout), Buffer.alloc(0));
 		if (command.mutating) assert.equal(success.stderr.toString(), "EFFECT");
-		const noisy = run(command, { before: `printf 'account notice\\n'; ${stub}`, input });
+		const noisy = run(command, { before: `printf 'account notice\\n'; ${stub}`, input: stdin });
 		assert.equal(noisy.status, 0);
 		refused(command, noisy.stdout);
 		if (command.mutating) assert.equal(noisy.stderr.toString(), "EFFECT");
