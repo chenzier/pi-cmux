@@ -5,6 +5,8 @@ import { resolve } from "node:path";
 import { resolveHandoffTarget } from "./cmux-continue.ts";
 import { capturePiLaunch } from "../lib/ssh/launch.ts";
 import { launchNavigationHint } from "../lib/orientation/hints.ts";
+import { waitForPiStartup } from "../lib/orientation/startup.ts";
+import { currentConversation } from "../lib/orientation/runtime.ts";
 import { messagingFor } from "../lib/messaging/runtime.ts";
 import {
 	describePiPlacement,
@@ -113,6 +115,7 @@ export default function cmuxStartExtension(pi: ExtensionAPI) {
 			"When confirming a handoff or related/reviewer launch, include the returned origin link and /cmbk return hint. Ctrl+Alt+B is the default shortcut, but it can be changed or disabled; the child navigation note uses its actual configuration. Do not invent links from pane titles or short refs, open the link, or navigate automatically. A native cmux link targets the tab, while /cmbk validates the live originating Pi conversation.",
 			"Pass task text through prompt and model settings through provider, model, and thinking; do not construct a Pi shell command with cmux_open_terminal or bash.",
 			"A handoff leaves this session open. After confirming success, leave the handed-off work to the new agent unless the user asks for parallel work.",
+			"Check details.startup: bound means the exact child conversation published a live Pi binding, not task readiness or completion. Unconfirmed means inspect the returned surface before retrying; never automatically create or respawn another agent.",
 		],
 		parameters: PARAMETERS as any,
 		executionMode: "sequential",
@@ -133,9 +136,21 @@ export default function cmuxStartExtension(pi: ExtensionAPI) {
 			signal?.throwIfAborted();
 			const launch = capturePiLaunch(pi, ctx.cwd);
 			const sourceCwd = ctx.cwd, sourceSession = launch.ticket?.context.sessionId;
+			// Fresh standalone launches must not inspect source history/session storage.
+			const parent = currentConversation(pi);
+			const parentSession = parent?.state.sessionId ?? sourceSession;
+			const ownsParent = () => {
+				if (!parent) return false;
+				const current = currentConversation(pi);
+				return current?.state.sessionId === parent.state.sessionId
+					&& current.state.conversationId === parent.state.conversationId && current.state.taskId === parent.state.taskId
+					&& current.state.role === parent.state.role && current.target.surfaceId === parent.target.surfaceId
+					&& ctx.sessionManager.getSessionId() === parentSession;
+			};
 			const check = () => {
 				signal?.throwIfAborted();
 				launch.check();
+				if (parent && !ownsParent()) throw new Error("Parent Pi session changed during startup verification; source binding is unavailable");
 				if (ctx.cwd !== sourceCwd || (sourceSession !== undefined && ctx.sessionManager.getSessionId() !== sourceSession)) throw new Error("Pi source session/cwd changed");
 			};
 			try {
@@ -187,17 +202,31 @@ export default function cmuxStartExtension(pi: ExtensionAPI) {
 						automaticReturn = { requestId: ticket.requestId, state: "not-configured", warning: `Child already launched. Do not relaunch automatically. ${error instanceof Error ? error.message : String(error)}` };
 					}
 				}
+				const startup = await waitForPiStartup(pi, result.orientation, result.created?.surface_id, check);
+				if (!signal?.aborted && startup.state === "unconfirmed" && ownsParent()) {
+					try { ctx.ui.notify(`Pi startup unconfirmed: ${startup.reason}`, "warning"); } catch { /* The tool result still carries the warning. */ }
+				}
 				const location = describePiPlacement(result.placement);
+				const outcome = startup.state === "bound"
+					? `Started ${params.continueSession ? "a handoff" : "a fresh Pi session"} in a new cmux ${location}: ${result.title}. Exact child Pi binding observed; task readiness and completion are not confirmed.`
+					: `Created a new cmux ${location}: ${result.title}; Pi startup is unconfirmed. ${startup.reason}`;
 				return {
-					content: [{ type: "text", text: `Started ${params.continueSession ? "a handoff" : "a fresh Pi session"} in a new cmux ${location}: ${result.title}. Working directory: ${cwd}. The source session remains open.${automaticReturn ? `\nAutomatic return: ${JSON.stringify(automaticReturn)}. Findings use best-effort follow-up delivery, not steering.` : ""}${result.navigation ? `\n${launchNavigationHint(result.navigation)}` : ""}` }],
+					content: [{ type: "text", text: `${outcome} Working directory: ${cwd}. The source session remains open.${automaticReturn ? `\nAutomatic return: ${JSON.stringify(automaticReturn)}. Findings use best-effort follow-up delivery, not steering.` : ""}${result.navigation ? `\n${launchNavigationHint(result.navigation)}` : ""}` }],
 					details: {
-						placement: result.placement, cwd, title: result.title, automaticReturn,
+						placement: result.placement, cwd, title: result.title, automaticReturn, startup,
 						continueSession: params.continueSession ?? false, sessionFile,
 						workspaceRef: result.workspaceRef, surfaceRef: result.surfaceRef,
 						source: result.source, created: result.created, orientation: result.orientation,
 						navigation: result.navigation,
 					},
 				};
+			} catch (error) {
+				// Notify the still-owning parent UI, without scheduling a model turn or
+				// leaking a stale launch's warning into a replacement conversation.
+				if (!signal?.aborted && ownsParent()) {
+					try { ctx.ui.notify(`Pi launch failed or is unconfirmed: ${error instanceof Error ? error.message : String(error)}`, "error"); } catch { /* Preserve the launch error. */ }
+				}
+				throw error;
 			} finally { launch.close(); }
 		},
 	});

@@ -179,7 +179,10 @@ for (const workflow of workflows) {
 
 	test(`${workflow.name}: do not fall back to another surface when respawn fails`, async (t) => {
 		const harness = createHarness(t, workflow, { respawnResult: { code: 1, stderr: "respawn failed" } });
-		assert.deepEqual(await workflow.open(harness.pi, { tabTitle: TITLE }), { ok: false, error: "respawn failed" });
+		const result = await workflow.open(harness.pi, { tabTitle: TITLE });
+		assert.equal(result.ok, false);
+		assert.match(result.error, /Created cmux surface.*child command dispatch was not confirmed.*respawn failed/);
+		assert.match(result.error, /do not relaunch automatically/i);
 		assert.equal(harness.callsFor(workflow.createCommand).length, 1);
 		assert.equal(harness.paneReadCount, 1);
 		assert.equal(harness.callsFor("respawn-pane")[0][4], CREATED_SURFACE);

@@ -44,6 +44,16 @@ export function currentConversation(pi: ExtensionAPI): { state: Orientation; tar
 	return { state: { ...runtime.state }, target: { ...runtime.target } };
 }
 
+/** Startup evidence only: the exact launched conversation reached orientation startup.
+ * This does not establish prompt processing, task readiness, or completion. */
+export function childStartupBinding(pi: ExtensionAPI, seed: Bootstrap, surfaceId: string): Binding | undefined {
+	const runtime = runtimes.get(pi), id = uuid(surfaceId);
+	if (!runtime || !id || id === runtime.target?.surfaceId || !ownsBinding(runtime)) return;
+	const binding = runtime.store.read(id);
+	if (!binding || !liveBinding(binding, { ...seed, sessionId: binding.sessionId })) return;
+	return binding;
+}
+
 export function renameOrientedTopic(pi: ExtensionAPI, topic: string, signal?: AbortSignal): Promise<boolean> | undefined {
 	const runtime = runtimes.get(pi);
 	return runtime?.state ? runtime.renameTopic(topic, signal) : undefined;

@@ -25,7 +25,7 @@ function harness(t, options = {}) {
 				let result;
 				switch (subcommand) {
 					case "identify": result = options.identify ?? json({ caller: CALLER, focused: { window_ref: "window:99" } }); break;
-					case "workspace create": result = options.create ?? json({ workspace_ref: "workspace:2", surface_ref: "surface:2" }); break;
+					case "workspace create": result = typeof options.create === "function" ? await options.create() : options.create ?? json({ workspace_ref: "workspace:2", surface_ref: "surface:2" }); break;
 					case "list-panes": {
 						assert.equal(args[3], "workspace:2");
 						result = options.poll?.(++polls) ?? json({ panes: [{ ref: "pane:2", surface_refs: ["surface:2"] }] });
@@ -122,9 +122,36 @@ for (const [label, poll, count] of [
 	});
 }
 
+for (const create of [
+	{ code: 1, stderr: "Socket closed before reply" },
+	{ killed: true },
+	() => { throw new Error("Socket closed before reply"); },
+]) test("workspace: lost creation acknowledgement is distinguished from child dispatch", async t => {
+	const h = harness(t, { create });
+	const result = await openCommandInNewWorkspace(h.pi, "/project", COMMAND, OPTIONS);
+	assert.equal(result.ok, false);
+	assert.match(result.error, /creation was not confirmed in window:1.*workspace may already exist.*Pi command was not dispatched/);
+	assert.match(result.error, /do not relaunch automatically/i);
+	assert.equal(callsFor(h, "workspace create").length, 1);
+	assert.equal(callsFor(h, "respawn-pane").length, 0);
+});
+
+test("workspace: a long Unicode command reports byte count and possible routing issue, not its contents", async t => {
+	const h = harness(t, { respawn: { code: 1, stderr: "Socket closed before reply" } });
+	const result = await openCommandInNewWorkspace(h.pi, "/project", "😀".repeat(1000), OPTIONS);
+	assert.equal(result.ok, false);
+	assert.match(result.error, /4000 UTF-8 bytes/);
+	assert.match(result.error, /may match cmux 0\.65\.2.*not proof/);
+	assert.doesNotMatch(result.error, /😀/);
+	assert.equal(callsFor(h, "respawn-pane").length, 1);
+});
+
 test("workspace: propagate respawn failure after initial naming without renaming again or relaunching", async (t) => {
 	const h = harness(t, { respawn: { code: 1, stderr: "respawn failed" } });
-	assert.deepEqual(await openCommandInNewWorkspace(h.pi, "/project", COMMAND, OPTIONS), { ok: false, error: "respawn failed" });
+	const result = await openCommandInNewWorkspace(h.pi, "/project", COMMAND, OPTIONS);
+	assert.equal(result.ok, false);
+	assert.match(result.error, /Created cmux surface surface:2 in workspace:2.*dispatch was not confirmed.*respawn failed/);
+	assert.match(result.error, /do not relaunch automatically/i);
 	assert.equal(callsFor(h, "respawn-pane").length, 1);
 	assert.equal(callsFor(h, "rename-tab").length, 1);
 	assert.ok(h.calls.indexOf(callsFor(h, "rename-tab")[0]) < h.calls.indexOf(callsFor(h, "respawn-pane")[0]));

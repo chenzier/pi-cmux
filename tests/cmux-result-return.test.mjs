@@ -8,6 +8,11 @@ import { makeEnvelope } from '../lib/messaging/protocol.ts';
 import { FOLLOWUP_CONTEXT, FOLLOWUP_INTENT } from '../lib/messaging/receipts.ts';
 import { orientationHarness } from './helpers/orientation.mjs';
 async function setup(t,options={}){
+ // Fake cmux creation never starts a child. Keep startup polling unconfirmed,
+ // but do not spend ten wall-clock seconds per fixture waiting for its binding.
+ const timeout=globalThis.setTimeout;t.mock.method(globalThis,'setTimeout',(callback,ms,...args)=>{
+  if(ms!==250)return timeout(callback,ms,...args);queueMicrotask(()=>callback(...args));return 0;
+ });
  const h=orientationHarness(t,options);h.ctx.sessionManager=SessionManager.create(h.root,h.root);h.ctx.sessionManager.appendMessage({role:'user',content:'Explicitly delegated review with findings returned',timestamp:1});h.ctx.hasPendingMessages=()=>false;
  const queue=[],messages=[],peers=new Map();h.pi.sendMessage=(message,delivery)=>{messages.push({message,delivery});h.ctx.sessionManager.appendCustomMessageEntry(message.customType,message.content,message.display,message.details)};
  const runtime=registerMessaging(h.pi,{client:()=>({ready:async()=>{},settings:async()=>true,list:async()=>[...queue]}),peer:id=>peers.get(id)});

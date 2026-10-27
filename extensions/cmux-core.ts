@@ -379,20 +379,20 @@ async function respawnSurface(
 	// Initialize before child command dispatch; never rename after respawn.
 	await renameSurfaceTab(pi, workspaceRef, surfaceRef, title);
 	checkCreatedLaunch(checkLaunch);
-	const respawnResult = await execCmux(pi, [
-		"respawn-pane",
-		"--workspace",
-		workspaceRef,
-		"--surface",
-		surfaceRef,
-		"--command",
-		command,
-	]);
-	if (!respawnResult.ok) {
-		return { ok: false, error: respawnResult.error || failureMessage };
-	}
-
-	return { ok: true };
+	let failure: string;
+	try {
+		const result = await execCmux(pi, [
+			"respawn-pane", "--workspace", workspaceRef, "--surface", surfaceRef, "--command", command,
+		]);
+		if (result.ok) return { ok: true };
+		failure = result.error || failureMessage;
+	} catch (error) { failure = error instanceof Error ? error.message : String(error); }
+	// Creation and command dispatch are separate effects. A lost respawn reply
+	// is not evidence that the command did not run, nor permission to replay it.
+	const bytes = Buffer.byteLength(command, "utf8");
+	const hint = /Socket closed before reply/i.test(failure) && bytes >= 1900
+		? " This may match cmux 0.65.2's known large-request routing bug; command size is diagnostic, not proof of the cause." : "";
+	return { ok: false, error: `Created cmux surface ${surfaceRef} in ${workspaceRef}, but child command dispatch was not confirmed. Inspect this surface before retrying; do not relaunch automatically. ${failure} (Launch command: ${bytes} UTF-8 bytes.)${hint}` };
 }
 
 export async function openCommandInNewWorkspace(
@@ -411,18 +411,19 @@ export async function openCommandInNewWorkspace(
 	// Do not pass --command here: some cmux versions type it into an interactive
 	// shell. Respawn only the returned workspace's surface, like splits and tabs.
 	options.checkLaunch?.();
-	const result = await execCmux(pi, [
-		// The legacy new-workspace verb ignores --json on cmux 0.64.25.
-		// Keep refs for command targeting and UUIDs for exact return authorization.
-		"--json", "--id-format", "both", "workspace", "create",
-		"--window", windowRef,
-		"--cwd", cwd,
-		"--name", formatTabTitle(options.title, "Pi"),
-		"--focus", String(options.focus ?? true),
-	]);
-	if (!result.ok) {
-		return { ok: false, error: result.error || "Failed to create cmux workspace" };
-	}
+	const creationFailure = (error: string): CommandOpenResult => ({ ok: false,
+		error: `cmux workspace creation was not confirmed in ${windowRef}; a workspace may already exist. The Pi command was not dispatched. Inspect cmux before retrying; do not relaunch automatically. ${error}` });
+	let result: CmuxExecResult;
+	try {
+		result = await execCmux(pi, [
+			// The legacy new-workspace verb ignores --json on cmux 0.64.25.
+			// Keep refs for command targeting and UUIDs for exact return authorization.
+			"--json", "--id-format", "both", "workspace", "create",
+			"--window", windowRef, "--cwd", cwd,
+			"--name", formatTabTitle(options.title, "Pi"), "--focus", String(options.focus ?? true),
+		]);
+	} catch (error) { return creationFailure(error instanceof Error ? error.message : String(error)); }
+	if (!result.ok) return creationFailure(result.error || "Failed to create cmux workspace");
 
 	checkCreatedLaunch(options.checkLaunch);
 	const parsed = parseJson<{ workspace_ref?: unknown; workspace_id?: unknown }>(result.stdout);

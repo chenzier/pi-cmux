@@ -39,6 +39,16 @@ These start independent chats. Explicit paths need no zoxide; fuzzy queries do. 
 
 Ask Pi to start a session to use `cmux_start_pi`. It accepts workspace/right/down/tab placement, title, focus, provider/model and thinking. `cwd` accepts existing absolute, relative or `~/…` directories; omission keeps the current directory. It cannot accompany `continueSession: true`. Sessions focus by default; `focus: false` opens in the background.
 
+### Pi startup guard
+
+`cmux_start_pi` distinguishes creation, command dispatch, and observed Pi startup. After a confirmed launch dispatch, it checks the exact returned surface UUID for the launched conversation’s live orientation binding for up to 10 seconds.
+
+- `details.startup.state: "bound"` means that exact Pi conversation published a live binding. It does not confirm prompt processing, task readiness, or completion.
+- `"unconfirmed"` returns an explicit warning rather than claiming a started handoff. The child may still be starting, blocked on startup, or already exited. Inspect the returned surface before retrying. Standalone/older launches without orientation or a returned surface UUID cannot be verified and also remain unconfirmed.
+- Transport failures distinguish unconfirmed workspace creation from an already-created surface whose command dispatch was not confirmed. Errors include known target refs and command byte count, not the launch command itself. A long command plus `Socket closed before reply` can match cmux 0.65.2’s known routing bug, but does not prove that diagnosis.
+
+The owning parent UI receives startup warnings/errors without a new model turn. Verification is bounded and read-only: no automatic retry, respawn, focus change, child cancellation, or terminal cleanup. Timeout is not proof that the child failed, and this is not an ongoing child-process monitor. The guard does not work around cmux’s large-request bug.
+
 ### Pi launch PATH
 
 Default `PI_CMUX_PI_PATH_MODE=minimal` resolves executable Pi/Node directories on caller PATH, invokes Pi by absolute path and prepends those directories to the child's own PATH. Relative entries resolve before changing cwd. Both PATH modes propagate to child Pi launches. Missing executables in minimal mode or an invalid mode stop creation without fallback.

@@ -4,6 +4,7 @@
 
 ### Added
 
+- Parent startup guard for `cmux_start_pi`: bounded verification of the exact child’s live Pi binding, explicit unconfirmed results and parent UI warnings without model turns or automatic retries. Preserve creation/dispatch phase and known target refs on workspace launch transport failures; include command byte counts for diagnostics.
 - Experimental SSH execution with explicit target selection, conversational connect, bounded discovery and separately confirmed alias saving. Pi/storage remain local; non-ready remote intent never falls back locally. Resume/children restore configured-only selection.
 - Related chat identities, topic-first titles, origin links and `/cmbk` with configurable shortcut.
 - Experimental peer messaging and opt-in delegated findings return. Delivery is best-effort follow-up, may incur model usage and grants no fix authority.
