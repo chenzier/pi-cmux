@@ -217,7 +217,7 @@ Default `detailed` shows status, progress, tokens and logs. `minimal` shows stat
 
 ## Notifications
 
-Off by default. Set `PI_CMUX_NOTIFY_LEVEL` to `all`, `medium` (completion/error) or `low` (error). Notifications wait for settlement and normally require interactive Pi inside cmux. `PI_CMUX_NOTIFY_FORCE=1` bypasses that context guard, not the level.
+Off by default. Set `PI_CMUX_NOTIFY_LEVEL` to `all`, `medium` (completion/error) or `low` (error). Notifications wait for settlement and normally require interactive Pi inside cmux. `PI_CMUX_NOTIFY_FORCE=1` bypasses that notification context guard, not the level or the bundle's verified-cmux startup check.
 
 `PI_CMUX_NOTIFY_INCLUDE_RESPONSE=1` includes up to 500 response characters; leave off for sensitive conversations. Other settings: `PI_CMUX_NOTIFY_TITLE=Pi`, `PI_CMUX_NOTIFY_THRESHOLD_MS=15000`, `PI_CMUX_NOTIFY_DEBOUNCE_MS=3000`.
 

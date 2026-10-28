@@ -12,6 +12,7 @@ import piCmuxExtension from "../extensions/index.ts";
 const { parseArgs } = await import(new URL("./cli/args.js", import.meta.resolve("@earendil-works/pi-coding-agent")).href);
 const gitEnv = () => ({ ...process.env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1" });
 const commandOffset = args => args[0] === "--json" ? (args[1] === "--id-format" ? 3 : 1) : 0;
+const BUNDLE_SURFACE = "11111111-1111-4111-8111-111111111111";
 const EMPTY_USAGE = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } };
 
 function assistant(content = [{ type: "text", text: "Previous implementation details" }]) {
@@ -19,6 +20,11 @@ function assistant(content = [{ type: "text", text: "Previous implementation det
 }
 
 function harness(t, options = {}) {
+	if (options.extension === piCmuxExtension) {
+		const previous = process.env.CMUX_SURFACE_ID;
+		process.env.CMUX_SURFACE_ID = BUNDLE_SURFACE;
+		t.after(() => { if (previous === undefined) delete process.env.CMUX_SURFACE_ID; else process.env.CMUX_SURFACE_ID = previous; });
+	}
 	const root = realpathSync(mkdtempSync(join(tmpdir(), "pi-cmux-start-")));
 	t.after(() => rmSync(root, { recursive: true, force: true }));
 	const cwd = join(root, "project's files");
@@ -58,7 +64,8 @@ function harness(t, options = {}) {
 			const subcommand = args[commandOffset(args)];
 			if (options.fail === subcommand) return { code: 1, killed: false, stdout: "", stderr: `${subcommand} failed` };
 			let response = {};
-			if (subcommand === "identify") response = { caller: { window_ref: "window:1", workspace_ref: "workspace:1", pane_ref: "pane:1", surface_ref: "surface:1" } };
+			if (subcommand === "identify") response = { caller: { window_ref: "window:1", workspace_ref: "workspace:1", pane_ref: "pane:1", surface_ref: "surface:1",
+				...(options.extension === piCmuxExtension ? { window_id: BUNDLE_SURFACE, workspace_id: BUNDLE_SURFACE, pane_id: BUNDLE_SURFACE, surface_id: BUNDLE_SURFACE } : {}) } };
 			else if (subcommand === "list-panes") response = { panes: [{ ref: "pane:1", surface_refs: ["surface:1"] }] };
 			else if (subcommand === "workspace") {
 				assert.equal(args[commandOffset(args) + 1], "create");
@@ -73,9 +80,9 @@ function harness(t, options = {}) {
 		writeFileSync(join(cwd, ".pi", "settings.json"), JSON.stringify(options.settings));
 		t.mock.method(process, "cwd", () => cwd);
 	}
-	(options.extension ?? cmuxStartExtension)(pi);
+	const ready = (options.extension ?? cmuxStartExtension)(pi);
 	return {
-		root, cwd, ctx, commands, tools, calls, notifications,
+		ready, root, cwd, ctx, commands, tools, calls, notifications,
 		invoke: (params = {}, signal) => tools.get("cmux_start_pi").execute("start-call", params, signal, undefined, ctx),
 		callsFor: (name) => calls.filter((call) => call.command === "cmux" && call.args[commandOffset(call.args)] === name),
 		launch() {
@@ -94,8 +101,9 @@ function harness(t, options = {}) {
 	};
 }
 
-test("bundle advertises browser, terminal, and Pi tools and registers /cmn, not /cmc", (t) => {
+test("bundle advertises browser, terminal, and Pi tools and registers /cmn, not /cmc", async (t) => {
 	const h = harness(t, { extension: piCmuxExtension });
+	await h.ready;
 	assert.deepEqual([...h.tools.keys()].sort(), ["bash", "cmux_annotate_browser", "cmux_message_inbox", "cmux_message_send", "cmux_open_browser", "cmux_open_terminal", "cmux_start_pi", "edit", "read", "ssh_alias_save", "ssh_connect", "ssh_discover", "write"]);
 	assert.ok(h.commands.has("cmmsg"));
 	assert.ok(h.commands.has("cmb"));
@@ -117,19 +125,21 @@ test("bundle advertises browser, terminal, and Pi tools and registers /cmn, not 
 	assert.ok(tool.promptGuidelines.some((text) => text.includes("explicitly")));
 });
 
-test("users can register former review command names as configured shortcuts", (t) => {
+test("users can register former review command names as configured shortcuts", async (t) => {
 	const commands = Object.fromEntries(["cmrv", "cmrh", "review-v", "review-h"].map((name) => [name, "echo own-review"]));
 	const h = harness(t, { extension: piCmuxExtension, settings: { "pi-cmux": { commands } } });
+	await h.ready;
 	for (const name of Object.keys(commands)) {
 		assert.match(h.commands.get(name).description, /echo own-review/);
 	}
 });
 
 for (const [name, description] of [["cmn", /fresh Pi chat/], ["cmb", /Open a browser/], ["cmba", /Retry browser annotations/], ["cmbk", /Return to the originating Pi conversation/], ["cmmsg", /Messaging controls:.*status.*inbox/]]) {
-	test(`configured shortcuts cannot replace /${name}`, (t) => {
+	test(`configured shortcuts cannot replace /${name}`, async (t) => {
 		const warnings = [];
 		t.mock.method(console, "warn", (message) => warnings.push(message));
 		const h = harness(t, { extension: piCmuxExtension, settings: { "pi-cmux": { commands: { [name]: "echo wrong" } } } });
+		await h.ready;
 		assert.match(h.commands.get(name).description, description);
 		assert.ok(warnings.some((warning) => warning.includes(`/${name}: command already exists`)));
 	});
@@ -142,9 +152,11 @@ test("configured /cmbk cannot replace return navigation when the shortcut is dis
 	const warnings = [];
 	t.mock.method(console, "warn", (message) => warnings.push(message));
 	const h = harness(t, { extension: piCmuxExtension, settings: { "pi-cmux": { commands: { cmbk: "echo wrong" } } } });
+	await h.ready;
 	await h.commands.get("cmbk").handler("", h.ctx);
 	assert.match(h.notifications.at(-1)[0], /no recorded origin/);
-	assert.equal(h.calls.length, 0, "return must not launch the configured shell command");
+	assert.equal(h.calls.length, 1, "only the bundle caller check may run");
+	assert.equal(h.callsFor("identify").length, 1);
 	assert.ok(warnings.some((warning) => warning.includes("/cmbk: command already exists")));
 });
 

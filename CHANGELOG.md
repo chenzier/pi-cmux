@@ -13,6 +13,7 @@
 
 ### Fixed
 
+- Disable the entire extension bundle quietly outside verified cmux terminals, including inherited/stale surface environments. Check the caller before registering commands, tools, shortcuts or hooks to avoid orientation startup warnings in other terminals.
 - Default SSH connections to the remote account's home when cwd is omitted, and accept literal `~` in `ssh_connect` and `/ssh-bind`. Resolve remote `HOME` under bounded framed transport before saving an absolute target; retain pending destination intent so failed or interrupted resolution cannot fall back locally on reload. Invalid explicit paths still require clarification.
 - Keep workspace headers visible while scrolling the pane switcher, preserve window and duplicate-workspace disambiguation when filtering, and bound workspace prefixes so long names cannot hide tab titles. Short terminals drop chrome to retain complete results; terminals too small for a result show a resize message and cannot accept an invisible selection.
 - Send long launch commands through a private `/bin/sh` script (`lib/launch-command.ts`) so cmux socket requests stay small. This avoids cmux 0.65.2's 4 KiB request-classification bug ([manaflow-ai/cmux#21222](https://github.com/manaflow-ai/cmux/issues/21222)), where a long prompt intermittently failed with `Socket closed before reply` after creating an empty surface. Commands under 1 KiB stay inline, scripts are `0600` and swept after an hour.

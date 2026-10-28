@@ -29,7 +29,9 @@ pi install npm:pi-cmux
 npx pi-cmux
 ```
 
-Run Pi inside cmux. For native notifications, session restore and prompt previews:
+Run Pi inside cmux. Outside a verified cmux terminal, the package stays disabled: no commands, tools, shortcuts or lifecycle hooks are registered. A reachable cmux socket alone does not enable it.
+
+For native notifications, session restore and prompt previews:
 
 ```sh
 cmux hooks pi install
