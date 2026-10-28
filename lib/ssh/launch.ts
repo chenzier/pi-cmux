@@ -96,7 +96,7 @@ export function consumeSshLaunch(pi: ExtensionAPI, ctx: Pick<ExtensionContext, "
 			throw new Error("Fresh bootstrap on an existing session");
 		}
 		const restored = restoreSshTarget(child, branch);
-		if (restored.kind === "clear" || restored.kind === "invalid") throw new Error("Bootstrap conflicts with saved intent");
+		if (restored.kind === "clear" || restored.kind === "pending" || restored.kind === "invalid") throw new Error("Bootstrap conflicts with saved intent");
 		const state = runtime.snapshot();
 		if (state.context?.sessionId !== child.sessionId || state.context.localCwd !== child.localCwd
 			|| !state.enabled || state.reason || state.association || !["inactive", "configured"].includes(state.state)

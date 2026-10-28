@@ -115,14 +115,62 @@ test("missing fields are clarified one at a time; suggestions/manual answers nev
 	await assert.rejects(h.execute("ssh_connect", h.target), /explicit current/); assert.equal(h.sshCalls.length, 0);
 	await h.request("fixture"); await h.execute("ssh_connect", h.target);
 	assert.equal(h.sshCalls.length, 1);
-	messages = await h.request("Connect to fixture"); assert.match(messages.at(-1).message.content, /absolute remote directory/);
-	await assert.rejects(h.execute("ssh_connect", h.target), /explicit current/);
+	messages = await h.request("Connect to fixture"); assert.match(messages.at(-1).message.content, /Use ssh_connect without another question/);
+	await assert.rejects(h.execute("ssh_connect", h.target), /explicit current/, "a host-only request grants home, not another path");
+	await h.execute("ssh_connect", { destination: "fixture" });
+	assert.equal(h.runtime.snapshot().target.remoteCwd, h.home);
+	messages = await h.request("Connect to fixture in relative"); assert.match(messages.at(-1).message.content, /absolute remote directory/);
+	await assert.rejects(h.execute("ssh_connect", { destination: "fixture" }), /explicit current/);
 	await h.request(JSON.stringify(h.remote)); await h.execute("ssh_connect", h.target);
 	await h.request("Connect to fixture"); await h.request("cancel");
 	await assert.rejects(h.execute("ssh_connect", h.target), /explicit current/);
 	await h.request(h.connectText, { source: "extension" }); await assert.rejects(h.execute("ssh_connect", h.target), /explicit current/);
 	await h.request(h.connectText, { streamingBehavior: "steer" }); await assert.rejects(h.execute("ssh_connect", h.target), /explicit current/);
 	await h.request("Summarize this quoted request: " + h.connectText); await assert.rejects(h.execute("ssh_connect", h.target), /explicit current/);
+});
+
+for (const explicit of [false, true]) {
+	test(`remote home ${explicit ? "~" : "default"} resolves in the remote shell and persists only the absolute directory`, async t => {
+		const h = fixture(t); await h.emit("session_start");
+		const text = "Connect to fixture" + (explicit ? " in ~" : "");
+		const messages = await h.request(text);
+		assert.match(messages.at(-1).message.content, /Use ssh_connect without another question/);
+		await h.execute("ssh_connect", explicit ? { destination: "fixture", remoteCwd: "~" } : { destination: "fixture" });
+		assert.equal(h.sshCalls.length, 2);
+		assert.equal(h.confirmations.length, 0);
+		assert.deepEqual(h.runtime.snapshot().target, { destination: "fixture", remoteCwd: h.home });
+		const entries = h.manager.getBranch().filter(entry => entry.customType === "pi-cmux.ssh-target");
+		assert.equal(entries.length, 2);
+		assert.equal(entries[0].data.kind, "pending"); assert.equal(entries[0].data.target, undefined);
+		assert.equal(entries[1].data.target.remoteCwd, h.home);
+		await h.execute("write", { path: "home-check.txt", content: "REMOTE_HOME" });
+		assert.equal(readFileSync(join(h.home, "home-check.txt"), "utf8"), "REMOTE_HOME");
+		assert.equal(existsSync(join(h.local, "home-check.txt")), false);
+		const callsBeforeResume = h.sshCalls.length;
+		await h.emit("session_start");
+		assert.equal(h.runtime.snapshot().state, "configured", "restoration does not resolve home or reconnect");
+		assert.equal(h.sshCalls.length, callsBeforeResume);
+	});
+}
+
+test("explicit invalid paths require clarification rather than silently selecting home", async t => {
+	const h = fixture(t); await h.emit("session_start");
+	for (const path of ["relative", "~/project", "~someone", '""']) {
+		const messages = await h.request(`Connect to fixture in ${path}`);
+		assert.match(messages.at(-1).message.content, /Ask only this missing field/);
+		await assert.rejects(h.execute("ssh_connect", { destination: "fixture" }), /explicit current/);
+		assert.equal(h.sshCalls.length, 0);
+	}
+	await h.request("~"); await h.execute("ssh_connect", { destination: "fixture", remoteCwd: "~" });
+	assert.equal(h.runtime.snapshot().target.remoteCwd, h.home);
+});
+
+test("the explicit ssh-bind command shares the remote-home default", async t => {
+	const h = fixture(t); await h.emit("session_start"); h.ctx.isIdle = () => true;
+	await h.commands.get("ssh-bind").handler('{"destination":"fixture"}', h.ctx);
+	assert.equal(h.runtime.snapshot().target.remoteCwd, h.home);
+	assert.equal(h.runtime.snapshot().state, "ready");
+	assert.equal(h.sshCalls.length, 2);
 });
 
 test("disable controls preserve local tools, block saved remote intent, and avoid discovery/config I/O", async t => {
@@ -136,6 +184,20 @@ test("disable controls preserve local tools, block saved remote intent, and avoi
 	await h.emit("session_start");
 	await assert.rejects(h.execute("write", { path: "no-fallback", content: "no" }), /not ready/);
 	assert.equal(existsSync(join(h.local, "no-fallback")), false);
+});
+
+test("failed home lookup cannot make core tools local on reload", async t => {
+	const h = fixture(t, { authFail: true }); await h.emit("session_start");
+	await h.request("Connect to fixture");
+	await assert.rejects(h.execute("ssh_connect", { destination: "fixture" }), /outside chat/);
+	assert.equal(h.sshCalls.length, 1);
+	for (const event of [undefined, "session_start", "session_tree"]) {
+		if (event) await h.emit(event);
+		assert.equal(h.runtime.snapshot().state, "disconnected");
+		await assert.rejects(h.execute("write", { path: "must-not-be-local", content: "no" }), /not ready/);
+		assert.equal(existsSync(join(h.local, "must-not-be-local")), false);
+	}
+	assert.equal(h.sshCalls.length, 1);
 });
 
 test("authentication failure and cancelled inputs do not reconnect, expose secrets or cause local fallback", async t => {
@@ -197,7 +259,7 @@ test("SSH question strings use the existing i18n provider with English fallback"
 	const locale = listeners.get("pi-core/i18n/localeChanged");
 	try {
 		locale({ locale: "es" });
-		const messages = await h.request("Conecta a fixture");
+		const messages = await h.request("Conecta a fixture en relative");
 		assert.match(messages.at(-1).message.content, /directorio remoto absoluto/);
 	} finally { locale({ locale: "en" }); }
 });

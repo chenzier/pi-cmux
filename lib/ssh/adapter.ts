@@ -10,6 +10,7 @@ import {
 	type SshTransport, type SshResult,
 } from "./transport.ts";
 import { createFileCommand, SshFileProtocolError, type SshFileOperation } from "./file-protocol.ts";
+import { parseSshConnectRequest, parseSshTarget, type SshTarget } from "./target.ts";
 
 /** POSIX lexical mapping only. No local prefix replacement, home/env expansion or shell evaluation. */
 export function resolveRemotePath(remoteCwd: string, path: string): string {
@@ -155,6 +156,31 @@ export class SshExecutionAdapter {
 		this.runtime = runtime; this.options = options;
 		this.transport = options.transport ?? new OpenSshTransport();
 	}
+	/** Resolve only the remote account's home under the current connection grant.
+	 * The root cwd is a transport bootstrap only, never an activated/saved target. */
+	async resolveHome(destination: string, signal?: AbortSignal, assertAuthorized?: () => void): Promise<{
+		readonly target: SshTarget; readonly assertCurrent: () => void;
+	}> {
+		const bootstrap = parseSshTarget({ destination, remoteCwd: "/" });
+		if (signal) checkSignal(signal);
+		assertAuthorized?.();
+		const lease = this.runtime.beginResolution(destination);
+		const activeSignal = AbortSignal.any([joinedSignal({ signal: lease }, signal), AbortSignal.timeout(SSH_DEFAULT_DEADLINE_MS)]);
+		const guard = () => { checkSignal(activeSignal); assertAuthorized?.(); };
+		const command = createFileCommand("home", "/");
+		try {
+			guard();
+			const result = await abortable(this.transport.run({ target: bootstrap, script: command.script,
+				signal: activeSignal, maxOutputBytes: 20 * 1024, assertCurrent: guard }), activeSignal);
+			guard(); requireZero(result);
+			const remoteCwd = new TextDecoder("utf-8", { fatal: true }).decode(command.decode(result.stdout));
+			return Object.freeze({ target: parseSshTarget({ destination, remoteCwd }), assertCurrent: guard });
+		} catch (error) {
+			if (!lease.aborted) this.runtime.disconnect(); // Never invalidate a replacement target.
+			throw error;
+		}
+	}
+
 	/** Call ONLY from an explicit current user action. Restoration/registration never validates. */
 	async probeValidation(signal?: AbortSignal, assertAuthorized?: () => void): Promise<SshValidationProbe> {
 		const ticket = this.runtime.beginValidation();
@@ -283,13 +309,25 @@ export function registerSshAdapter(pi: ExtensionAPI, options: SshAdapterOptions 
 		return { operations: createSshOperations(runtime, adapter.transport, ticket, ctx.signal, options.observeAssociation).bash };
 	});
 	pi.registerCommand("ssh-bind", {
-		description: 'Explicitly bind and validate SSH: /ssh-bind {"destination":"alias","remoteCwd":"/project"}',
+		description: 'Explicitly bind and validate SSH: /ssh-bind {"destination":"alias","remoteCwd":"~"} (cwd defaults to remote home)',
 		handler: async (args, ctx) => {
 			if (!ctx.isIdle()) throw new Error("Wait until Pi is idle before binding SSH");
-			let target: unknown;
-			try { target = JSON.parse(args); } catch { throw new Error("Expected an SSH target JSON object"); }
-			runtime.activate(target);
-			await adapter.validate(ctx.signal);
+			let value: unknown;
+			try { value = JSON.parse(args); } catch { throw new Error("Expected an SSH target JSON object"); }
+			const request = parseSshConnectRequest(value);
+			const owner = runtime.snapshot().context;
+			const guard = () => {
+				if (ctx.signal?.aborted || !owner || owner.sessionId !== ctx.sessionManager.getSessionId() || owner.localCwd !== ctx.cwd
+					|| runtime.snapshot().context?.sessionId !== owner.sessionId || runtime.snapshot().context?.localCwd !== owner.localCwd) {
+					throw new Error("SSH connection context changed");
+				}
+			};
+			guard();
+			const home = request.remoteCwd === "~" ? await adapter.resolveHome(request.destination, ctx.signal, guard) : undefined;
+			home?.assertCurrent(); guard();
+			runtime.activate(home?.target ?? parseSshTarget(request));
+			const probe = await adapter.probeValidation(ctx.signal, guard);
+			try { probe.commit(guard); } finally { probe.discard(); }
 			ctx.ui.notify("SSH execution ready; Pi, session storage and other extensions remain local", "info");
 		},
 	});

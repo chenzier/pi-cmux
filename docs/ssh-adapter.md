@@ -31,11 +31,13 @@ Framing/stderr consume output budget. Oversized files fail; use bounded bash out
 
 ## File integrity
 
-Validation requires empty stdout. Every file reply then has a fresh nonce, canonical decimal byte length, raw payload and exact trailer. Reads/MIME/edits consume verified bytes only; acknowledgements must have zero payload. Prefixes, suffixes, extra/truncated frames, wrong markers and malformed lengths are rejected, never stripped.
+Cwd validation requires empty stdout. File replies and the fixed remote-home query have a fresh nonce, canonical decimal byte length, raw payload and exact trailer. Home lookup is capped at 20 KiB of raw output and validates strict UTF-8 plus an absolute path before selection; it never expands a local home. Reads/MIME/edits consume verified bytes only; acknowledgements must have zero payload. Prefixes, suffixes, extra/truncated frames, wrong markers and malformed lengths are rejected, never stripped.
 
 Protocol errors revoke only the current dispatch generation. Invalid mutation acknowledgements mean effects may already have occurred; no retry or rollback follows. Framing uses no remote temporary file or encoding utility. Length counting and payload transfer are separate reads; changing-size files/streams can fail verification. This detects contamination, not malicious-host behavior or concurrent-writer races.
 
 ## Validation and cancellation
+
+`resolveHome(destination, signal, assertAuthorized)` revokes prior dispatch and persists destination-only pending intent. It returns an absolute target plus a fence the caller must check immediately before activation, with no intervening await. Failure/reload cannot make pending intent local or restore an older target.
 
 `probeValidation(signal, assertAuthorized)` remains non-ready. Its single-use probe commits synchronously after final cancellation/authority checks; callers must commit or discard. Revoked grants abort pending validation; stale settlement cannot affect a newer ticket.
 

@@ -62,10 +62,12 @@ You can also ask Pi to open a tool, browser or another Pi session. Use `role: "r
 ## Experimental SSH
 
 ```text
+Connect to javi
+# Or choose a project:
 Connect to javi in /srv/project
 ```
 
-Pi and its credentials/session files stay local; core file/shell tools use the explicit remote target. Helpers default to that project; `/cmt --local k9s` or tool `target: "local"` stays on the Mac. Complete requests need no extra gate; missing details are asked one at a time. Alias saving is separate and requires an exact-preview confirmation.
+Pi and its credentials/session files stay local; core file/shell tools use the explicit remote target. Helpers default to that project; `/cmt --local k9s` or tool `target: "local"` stays on the Mac. Omitted cwd or `~` defaults to the remote account's home, resolved remotely and stored as an absolute path. Complete requests need no extra gate; unresolved hosts or invalid paths are clarified one at a time. Alias saving is separate and requires an exact-preview confirmation.
 
 Resume/child launches restore selection, not readiness. Remote-owned layouts, SSH handoffs/worktrees and new browser previews are unsupported. See [SSH setup, controls and limits](docs/ssh.md).
 

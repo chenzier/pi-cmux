@@ -142,7 +142,7 @@ Same-checkout handoffs include a summary and available conversation branch. Work
 
 Or ask Pi to use `cmux_open_terminal`. Local helpers preserve caller PATH and run `/bin/sh -c`. They require a verified local workspace, creation capabilities and exact UUIDs; startup uses one local-context RPC. Naming is best-effort after creation, including protected Pi tabs/splits. Workspace/legacy Pi paths name before respawn. Creation is not command completion.
 
-With a ready SSH target, helpers default to remote cwd/PATH. Use `/cmt --local k9s` or tool `target: "local"` for the Mac; `--remote` requires readiness. Non-ready remote intent never falls back locally. See [SSH usage](ssh.md) and [helper compatibility/evidence](ssh-terminal.md).
+`Connect to javi` defaults to the remote account's home; `in ~` is equivalent, while an explicit project path must be absolute. Home resolution never uses your Mac's home directory. With a ready SSH target, helpers default to remote cwd/PATH. Use `/cmt --local k9s` or tool `target: "local"` for the Mac; `--remote` requires readiness. Non-ready remote intent never falls back locally. See [SSH usage](ssh.md) and [helper compatibility/evidence](ssh-terminal.md).
 
 ## Browser splits
 

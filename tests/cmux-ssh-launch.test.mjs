@@ -174,6 +174,16 @@ test("matching resumed metadata stays configured and foreign restored sessions f
 	assert.equal(foreign.runtime.snapshot().state, "configured");
 });
 
+test("child bootstrap cannot replace unresolved connection intent saved on the current branch", () => {
+	const parent = harness(); parent.ready();
+	const child = harness({ session: "child", sessionFile: "/resume.jsonl", branch: [{ type: "custom", customType: "pi-cmux.ssh-target", data: {
+		version: 1, kind: "pending", sessionId: "child", localCwd: "/local/project", destination: "another-host",
+	} }] });
+	assert.throws(() => consume(child, envelope(parent, "/resume.jsonl")), /refused/);
+	assert.equal(child.runtime.snapshot().state, "disconnected");
+	assert.equal(child.calls.length, 0);
+});
+
 test("opt-in bootstrap registration shares runtime, strips env synchronously, never replays on session start", async () => {
 	const parent = harness(); parent.ready(); const child = harness({ session: "child" });
 	const previous = process.env[SSH_LAUNCH_ENV];

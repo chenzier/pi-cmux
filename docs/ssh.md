@@ -5,21 +5,24 @@ Pi, credentials, session files and other extensions stay local. Only `read`, `wr
 ## Connect
 
 ```text
+Connect to javi
+Connect to javi in ~
 Connect to javi in /srv/project
 Connect to javi in "/srv/project with spaces"
 ```
 
-Use a direct idle interactive/RPC prompt. Complete requests proceed without a picker or extra yes/no gate; incomplete requests ask one missing field at a time. Aliases, manual hosts/IPs and `user@host` are accepted. Discovery suggests but never selects.
+Use a direct idle interactive/RPC prompt. The destination is required; omitting the directory defaults to the remote account's home, as does an explicit `~`. The connector resolves the remote `HOME`, then stores and validates its absolute path—never your Mac's home. Other directory values must be absolute; `~/project` and `~user` require clarification rather than silently falling back to home. Complete requests proceed without a picker or extra yes/no gate; an unresolved destination or invalid explicit path asks one question. Aliases, manual hosts/IPs and `user@host` are accepted. Discovery suggests but never selects.
 
 The input parser supports simple English/Spanish requests and literal follow-up answers, not arbitrary phrasing. Quoted requests, expanded file content, peers, streaming steering and saved state grant no connection. For an unrecognized request, use:
 
 ```text
+/ssh-bind {"destination":"javi"}
 /ssh-bind {"destination":"javi","remoteCwd":"/srv/project"}
 /ssh-validate
 /ssh-clear
 ```
 
-Bind selects/validates; validate explicitly rechecks saved intent; clear returns core tools to local execution. Resume and child launches restore **configured**, never ready. Invalid, disabled or disconnected remote intent blocks execution instead of falling back locally. Failed connection attempts need a new request.
+Bind selects/validates; validate explicitly rechecks a resolved saved target; clear returns core tools to local execution. Home requests perform one bounded home lookup and one cwd validation, not retries. While resolving home, prior dispatch is revoked and only pending destination intent is saved. Failure or reload in that phase remains blocked until a fresh connection request or explicit clear; it cannot restore an older target or fall back locally. Resume and child launches restore resolved targets as **configured**, never ready. Failed connection attempts need a new request.
 
 ## Authentication and aliases
 
@@ -53,10 +56,10 @@ Same-project fresh/related/reviewer tabs/splits keep Pi local and transfer confi
 
 - Ordinary local cmux workspaces only. Remote-owned/cloud/relay/tmux layouts, SSH sidebar workspace creation, explicit cwd changes, handoffs/worktrees/Git/zoxide and new browser previews are refused. Existing annotation stop/retry and drafts remain available.
 - Remote requirements: account shell, `/bin/bash`, `cat`, `mkdir`, `test`, POSIX `wc`, quiet startup stdout. File replies use strict byte framing; unexpected output is refused, not file data.
-- File paths are literal POSIX paths; no tilde/environment expansion. Remote project instructions/extensions are not loaded automatically. Read applicable instruction files as data and establish which guidance applies before changes.
+- File paths are literal POSIX paths; no tilde/environment expansion. The `~` special case applies only to the connection's cwd, not read/write/edit paths. Remote project instructions/extensions are not loaded automatically. Read applicable instruction files as data and establish which guidance applies before changes.
 - Cancellation kills local SSH, not necessarily remote descendants. Partial effects are possible; uncertain mutations/creations are never replayed or rolled back automatically.
 - Output spools remain local and cannot be opened through remote `read`.
 
-Native evidence covers clean real SSH core operations and historical ordinary-local-workspace helper/child tabs. Splits, persisted child resume/remote execution, live alias UI, cancellation/noisy-account experiments and later launch-size changes remain unverified. No minimum cmux version is certified for this path.
+Native evidence covers clean real SSH core operations and historical ordinary-local-workspace helper/child tabs. Splits, persisted child resume/remote execution, live alias UI, default-home resolution, cancellation/noisy-account experiments and later launch-size changes remain unverified. No minimum cmux version is certified for this path.
 
 [Transport](ssh-adapter.md) · [Target contract](ssh-target-contract.md) · [Connection API](ssh-connect.md) · [Discovery](ssh-discovery.md) · [Helpers](ssh-terminal.md) · [Launches](ssh-launch.md) · [Native evidence](ssh-native-validation.md) · [Post-fix evidence](ssh-postfix-validation.md) · [Smoke recipe](ssh-smoke.md)

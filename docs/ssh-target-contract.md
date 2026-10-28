@@ -11,9 +11,11 @@ One session-scoped runtime separates local Pi context from an explicitly selecte
 | Target | `destination`, absolute POSIX `remoteCwd` |
 | Local context | Owning `sessionId`, absolute `localCwd` |
 | Optional association | Workspace UUID, explicit backend |
-| Persisted record | Version 1, local owner, target/association or clear tombstone |
+| Persisted record | Version 1, local owner, resolved target/association, pending destination intent or clear tombstone |
 
 Destinations accept literal aliases/hosts/IPs and optional user; reject option-like, credential/URI, wildcard, control or shell syntax. IPv6 is validated as an address. Remote paths preserve spaces/quotes/Unicode/dollar signs but reject controls, relative paths and excessive length. Never validate remote paths with local stat/realpath or expand them locally.
+
+Connection requests may omit cwd or supply literal `~`; the connector resolves the remote home before creating an absolute target. Pending records contain only the destination and local owner, never `~` or a placeholder cwd. They restore blocked, without replaying resolution or resurrecting an older target. Older readers reject the new record kind conservatively.
 
 Identity/port/ProxyJump stay in OpenSSH config. No keys, arbitrary SSH options, credentials, readiness or authorization are persisted. Parsers reject getters/non-data objects and discard unknown restoration fields. Action tools separately reject extras.
 
@@ -27,13 +29,15 @@ Identity/port/ProxyJump stay in OpenSSH config. No keys, arbitrary SSH options, 
 | disconnected | Failure/stale/invalid intent; no local fallback |
 | disabled | Remote dispatch refused; retained intent is not local |
 
+Home resolution revokes dispatch and marks the runtime disconnected with pending intent until an absolute target is available. Its revocation signal fences replacement, including A→B→A, and survives the lookup/caller await boundary through scoped evidence. No unresolved target is dispatched or persisted.
+
 Enabling never activates/reconnects. Clear is explicit and persists a tombstone. Restore reads only the current branch's latest target entry; invalid/foreign/local-context-mismatched entries fail closed, not back to an older target. Resume/tree navigation reconstructs configured intent only. Shutdown revokes runtime state.
 
 Pi can defer setup-only entries until the first conversation message flushes a session file. Losing unflushed selection never restores authority; no second state file is introduced.
 
 ## Runtime API
 
-`SshTargetRuntime` exposes startSession, activate, beginValidation, completeValidation, failValidation, captureDispatch, assertDispatch, observeAssociation, disconnect, clear, setEnabled, shutdown, snapshot and subscribe. Registration is idempotent per ExtensionAPI via WeakMap and wired through the central SSH extension.
+`SshTargetRuntime` exposes startSession, activate, beginResolution, beginValidation, completeValidation, failValidation, captureDispatch, assertDispatch, observeAssociation, disconnect, clear, setEnabled, shutdown, snapshot and subscribe. Registration is idempotent per ExtensionAPI via WeakMap and wired through the central SSH extension.
 
 Tickets are immutable, runtime-instance capabilities checked by object identity, owner and generation. Replacement—even A→B→A—validation restart/failure, lifecycle/enablement changes and disconnect revoke them. Check synchronously before effects and after awaits. Stale completion/failure cannot affect newer state. Revocation signals request cancellation, not remote quiescence.
 
