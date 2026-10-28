@@ -8,6 +8,7 @@ import cmuxOpenExtension from "./cmux-open.ts";
 import cmuxBrowserExtension from "./cmux-browser.ts";
 import cmuxSidebarExtension from "./cmux-sidebar.ts";
 import cmuxAutotitleExtension from "./cmux-autotitle.ts";
+import cmuxSwitcherExtension from "./cmux-switcher.ts";
 import { initI18n } from "./i18n.ts";
 import registerOrientation from "../lib/orientation/runtime.ts";
 import registerMessaging from "./cmux-messages.ts";
@@ -26,5 +27,6 @@ export default function piCmuxExtensionBundle(pi: ExtensionAPI) {
 	cmuxBrowserExtension(pi);
 	cmuxSidebarExtension(pi);
 	cmuxAutotitleExtension(pi);
+	cmuxSwitcherExtension(pi);
 	registerMessaging(pi);
 }

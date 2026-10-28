@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+### Added
+
+- `/cm` pane switcher: a transient overlay that lists live cmux terminal and browser tabs, filters as you type by workspace, title, URL or agent, and jumps by revalidated surface UUID. A compact 64-column overlay with explicit workspace headers, two-line tab results, pane/tab locations, theme-colored borders, agent states and shortcut hints makes the hierarchy easier to scan. Agent labels come only from cmux metadata; rows fall back to the surface type. Optional `PI_CMUX_SWITCHER_KEY` adds a Pi-local shortcut (`off` by default). No persistence, sidebar change, pane creation or model turn.
+
+### Fixed
+
+- Keep workspace headers visible while scrolling the pane switcher, preserve window and duplicate-workspace disambiguation when filtering, and bound workspace prefixes so long names cannot hide tab titles. Short terminals drop chrome to retain complete results; terminals too small for a result show a resize message and cannot accept an invisible selection.
+
+### Documentation
+
+- Document the switcher and record its live evidence: cmux 0.65.2 multi-tab jumps in one workspace and exact focus back to the caller. Multi-window/workspace and browser jumps remain fixture-only.
+
 ## [0.3.0] - 2026-10-27
 
 ### Added

@@ -8,13 +8,27 @@ export interface NavigationHints {
 }
 export interface ReturnShortcut { key?: string; label?: string; invalid: boolean }
 
-export function resolveReturnShortcut(raw?: string): ReturnShortcut {
-	const key = raw?.trim().toLowerCase() || "ctrl+alt+b";
+/** Validate one Pi key identifier; an empty value means no shortcut configured. */
+export function parseShortcutKey(raw: string): ReturnShortcut {
+	const key = raw.trim().toLowerCase();
+	if (!key) return { invalid: false };
 	if (key === "off") return { invalid: false };
 	const modifiers = key.split("+").slice(0, -1);
 	if (!/^(?:(?:ctrl|alt|shift)\+)*(?:[a-z0-9]|left|right|up|down|home|end|f[1-9]|f1[0-2])$/.test(key) || new Set(modifiers).size !== modifiers.length) return { invalid: true };
 	const label = key.split("+").map(part => part.length === 1 || /^f\d+$/.test(part) ? part.toUpperCase() : part[0].toUpperCase() + part.slice(1)).join("+");
 	return { key, label, invalid: false };
+}
+
+/** Modifier order is not significant: `alt+ctrl+b` matches `ctrl+alt+b`. */
+export function canonicalShortcutKey(key: string): string {
+	const parts = key.trim().toLowerCase().split("+").filter(Boolean);
+	const base = parts.pop() ?? "";
+	const modifiers = [...new Set(parts)].sort();
+	return [...modifiers, base].join("+");
+}
+
+export function resolveReturnShortcut(raw?: string): ReturnShortcut {
+	return parseShortcutKey(raw?.trim() || "ctrl+alt+b");
 }
 
 /** Native tab links use full UUIDs, not labels, indices, or short refs. */

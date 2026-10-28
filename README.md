@@ -13,6 +13,7 @@
 ## Capabilities
 
 - Start independent chats or related reviewers; return to their origin with `/cmbk`.
+- Jump to any cmux terminal or browser tab with `/cm`: one transient, type-to-filter list of live panes.
 - Run tools beside Pi, annotate browser pages and continue tasks in new worktrees.
 - Show progress, tokens and optional notifications in the sidebar.
 
@@ -47,6 +48,7 @@ Package notifications default to off to avoid duplicate alerts. Zoxide is needed
 | Browser annotations | Turn on **Annotate**; sending requires confirmation in Pi |
 | Jump directory | `/cmz <path-or-query>`, `/cmzh <path-or-query>` |
 | Return to origin | `/cmbk` or **Ctrl+Alt+B** |
+| Jump to pane | `/cm` or optional `PI_CMUX_SWITCHER_KEY` |
 | Continue task | `/cmcv [note]`, `/cmch [note]` |
 | Continue in worktree | `/cmcv -c <branch> [--from <ref>] [note]` |
 | Peer messages | `/cmmsg inbox`, `/cmmsg status`, `/cmmsg on`, `/cmmsg off` |
@@ -78,6 +80,7 @@ Set environment variables before starting Pi. Package settings belong in `~/.pi/
 | `PI_CMUX_NOTIFY_LEVEL` | `disabled` | Opt in with `all`, `medium` or `low` |
 | `PI_CMUX_SIDEBAR_MODE` | `detailed` | `minimal` shows status/tokens without package logs/progress |
 | `PI_CMUX_RETURN_KEY` | `ctrl+alt+b` | Change shortcut or set `off`; `/cmbk` remains |
+| `PI_CMUX_SWITCHER_KEY` | `off` | Pi-local shortcut for `/cm`, e.g. `ctrl+alt+p`; not a cmux-wide binding |
 | `PI_CMUX_AUTOTITLE` | `0` | Enable model-generated topics; sends conversation excerpts and may incur charges |
 
 [All settings and shortcuts](docs/usage.md#configuration) · [PATH behavior](docs/usage.md#pi-launch-path) · [Browser privacy](docs/usage.md#browser-annotations)
@@ -86,4 +89,4 @@ Set environment variables before starting Pi. Package settings belong in `~/.pi/
 
 Bundled Pi tabs/splits and helper terminals require verified local workspace metadata and exact creation UUIDs. Remote-owned or unverified placement is refused. New sidebar workspaces still use create + respawn; cmux's outer login shell may run profiles before the launch PATH takes effect. Standalone legacy Pi launch paths can do the same.
 
-Workspace/browser behavior was tested on cmux **0.64.25**; orientation and ordinary-local-workspace SSH helper/child tabs on **0.65.2**. The 0.3.0 [local startup smoke](docs/startup-smoke.md) passed for one no-prompt workspace and one tab on **0.65.2** with Pi **1.4.0**. Splits, other layouts, long prompts and live transport failures remain unverified. See [compatibility details](docs/usage.md#compatibility) and [SSH evidence](docs/ssh-native-validation.md).
+Workspace/browser behavior was tested on cmux **0.64.25**; orientation, ordinary-local-workspace SSH helper/child tabs and the `/cm` switcher on **0.65.2**. The switcher revalidates exact surface UUIDs before focusing and leaves rows unlabeled when cmux reports no agent. The 0.3.0 [local startup smoke](docs/startup-smoke.md) passed for one no-prompt workspace and one tab on **0.65.2** with Pi **1.4.0**. Splits, other layouts, long prompts and live transport failures remain unverified. See [compatibility details](docs/usage.md#compatibility) and [SSH evidence](docs/ssh-native-validation.md).

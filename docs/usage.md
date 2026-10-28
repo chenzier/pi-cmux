@@ -9,6 +9,7 @@ Run Pi inside cmux. See [installation](../README.md#install).
 | New sidebar chat | `/cmn <prompt>` |
 | Pi right/below | `/cmv [prompt]`, `/cmh [prompt]` |
 | Return to origin | `/cmbk` or **Ctrl+Alt+B** |
+| Jump to pane | `/cm` or optional `PI_CMUX_SWITCHER_KEY` |
 | Peer messages | `/cmmsg inbox`, `/cmmsg status`, `/cmmsg on`, `/cmmsg off` |
 | Continue right/below | `/cmcv [note]`, `/cmch [note]` |
 | Continue in worktree | `/cmcv -c <branch> [--from <ref>] [note]` |
@@ -83,6 +84,26 @@ Tabs show topic, role and task tag: `Check login · review [ab12]`. Tags are lab
 ### Persistence and compatibility
 
 Reload/resume preserves a session's identity. `/new`, another session and `/fork` use their own identities; tree navigation follows the active branch. `/name` changes the topic, not the task marker. After sleep, live bindings may need a few seconds to renew. See the [orientation contract](pane-orientation-design.md).
+
+## Pane switcher
+
+`/cm` opens a transient overlay with every switchable cmux surface: terminal tabs and browser tabs across your workspaces. It reads the live layout on each opening, shows no layout preview, changes neither sidebar and stores no pane registry.
+
+- **Type to filter** by workspace, tab title, browser URL, surface type, agent name or agent state. Matching is case-insensitive and every word must match.
+- Unfiltered, rows are grouped by workspace with the current workspace first and a `· you` marker on this conversation. Workspace headers stay visible when scrolling within a group. Filtering flattens the list and shows a bounded workspace label beside each tab title, leaving room for the title. Window numbers distinguish multiple windows; workspace numbers distinguish repeated workspace names within a window.
+- On short terminals, the overlay drops borders and hints before hiding result metadata. If even the input, workspace header and tab cannot fit, it shows **Resize terminal** and ignores Enter until the terminal grows; **Esc** still closes it.
+- **↑↓** selects, **Enter** jumps, **Esc** or **Ctrl-C** closes. Enter with no matches does nothing.
+- Agent labels such as `pi · working` come only from cmux metadata. When cmux reports no agent for a tab, the row shows the surface type (`terminal`, `browser`). In a reused tab, ended sessions are ignored while a live one exists; a tab whose only reported session has ended shows that state, and several live agents on one tab leave it unlabeled rather than guessing.
+
+Jumping re-reads the layout and matches the exact surface UUID, so a moved tab still resolves correctly. Closed, ambiguous or unconfirmed targets report an error and never fall back to a nearby pane, title or index. The overlay only focuses; it never creates panes, types into terminals or starts a model turn.
+
+`PI_CMUX_SWITCHER_KEY` adds an optional Pi-local shortcut (`off` by default):
+
+```sh
+PI_CMUX_SWITCHER_KEY=ctrl+alt+p pi
+```
+
+`off` or an invalid value disables only the shortcut; `/cm` keeps working. A value equal to `PI_CMUX_RETURN_KEY` is refused with a warning so `/cmbk` stays predictable. Set it before starting Pi: `/reload` cannot import exports from your shell. This is a Pi keybinding, not a cmux-wide or macOS-global shortcut, so it only works while Pi has focus.
 
 ## Peer messaging (experimental)
 
@@ -203,6 +224,6 @@ Use `/edit src/auth.ts`, `/dev` or `/logs`. Options: `run`, `acceptArgs`, `direc
 
 ## Compatibility
 
-Workspace/browser behavior was tested with cmux **0.64.25**; orientation and ordinary-local-workspace SSH helper/child tabs with **0.65.2**. The 0.3.0 [local startup smoke](startup-smoke.md) passed for one no-prompt sidebar workspace and one protected local-context tab on **0.65.2** with Pi **1.4.0**, including exact child bindings and independent local process/cwd checks. Splits, other native layouts, long prompts and live transport failures remain unverified; no minimum cmux version is certified for protected creation. Missing capabilities or ambiguous identity fail without retry/substitute placement.
+Workspace/browser behavior was tested with cmux **0.64.25**; orientation, ordinary-local-workspace SSH helper/child tabs and the `/cm` switcher with **0.65.2**. The switcher was smoke-tested on 0.65.2 for multi-tab jumps inside one workspace and for exact focus back to the caller; several workspaces/windows and browser targets were exercised with fixtures, not live cmux, and remain unverified live. The 0.3.0 [local startup smoke](startup-smoke.md) passed for one no-prompt sidebar workspace and one protected local-context tab on **0.65.2** with Pi **1.4.0**, including exact child bindings and independent local process/cwd checks. Splits, other native layouts, long prompts and live transport failures remain unverified; no minimum cmux version is certified for protected creation. Missing capabilities or ambiguous identity fail without retry/substitute placement.
 
 Bundled Pi tabs/splits use protected local-context creation. Local sidebar workspaces still use create + respawn; standalone legacy Pi paths can use discovery/respawn. These paths may run login profiles. Remote-owned layouts and SSH worktrees/handoffs/zoxide/new browser previews are refused. See [SSH limits](ssh.md#limits).

@@ -102,6 +102,7 @@ test("bundle advertises browser, terminal, and Pi tools and registers /cmn, not 
 	assert.ok(h.commands.has("cmba"));
 	assert.ok(h.commands.has("cmn"));
 	assert.equal(h.commands.has("cmc"), false);
+	assert.ok(h.commands.has("cm"));
 	assert.ok(h.commands.has("cmcv"));
 	assert.ok(h.commands.has("cmch"));
 	for (const name of ["cmrv", "cmrh", "review-v", "review-h"]) {
