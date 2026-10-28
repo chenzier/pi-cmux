@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { effectiveArgv } from "./helpers/launch-command.mjs";
 import { test } from "node:test";
 import { openCommandInNewSplit, openCommandInNewTab } from "../extensions/cmux-core.ts";
 
@@ -87,7 +88,7 @@ function createHarness(t, workflow, options = {}) {
 }
 
 function assertTarget(harness, surface) {
-	assert.deepEqual(harness.callsFor("respawn-pane"), [
+	assert.deepEqual(harness.callsFor("respawn-pane").map(effectiveArgv), [
 		["respawn-pane", "--workspace", WORKSPACE, "--surface", surface, "--command", COMMAND],
 	]);
 	assert.deepEqual(harness.callsFor("rename-tab"), [

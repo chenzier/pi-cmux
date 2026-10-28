@@ -7,6 +7,7 @@ import { prepareOrientation } from "../lib/orientation/runtime.ts";
 import { BINDING_TTL_MS, decodeBootstrap } from "../lib/orientation/state.ts";
 import { waitForPiStartup } from "../lib/orientation/startup.ts";
 import { orientationHarness } from "./helpers/orientation.mjs";
+import { effectiveCommand } from "./helpers/launch-command.mjs";
 
 const CHILD = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const binding = (seed, extra = {}) => ({ ...seed, version: 1, sessionId: randomUUID(), token: randomUUID(), pid: process.pid, expiresAt: Date.now() + BINDING_TTL_MS, ...extra });
@@ -82,7 +83,7 @@ async function launchHarness(t, mode) {
 			if (mode === "transport-error") return { code: 1, killed: false, stdout: "", stderr: "Socket closed before reply" };
 			if (mode === "exception") throw new Error("Socket closed before reply");
 			if (mode === "bound") {
-				const command = args[args.indexOf("--command") + 1];
+				const command = effectiveCommand(args[args.indexOf("--command") + 1]);
 				const seed = decodeBootstrap(command.match(/PI_CMUX_ORIENTATION='([^']+)'/)[1]);
 				h.store.write(CHILD, binding(seed));
 			}

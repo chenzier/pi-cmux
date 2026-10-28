@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { effectiveArgv } from "./helpers/launch-command.mjs";
 import { openCommandInNewWorkspace } from "../extensions/cmux-core.ts";
 
 const CALLER = { window_ref: "window:1", workspace_ref: "workspace:1", surface_ref: "surface:1" };
@@ -57,7 +58,7 @@ for (const focus of [undefined, true, false]) {
 			"--json", "--id-format", "both", "workspace", "create", "--window", "window:1", "--cwd", "/project",
 			"--name", OPTIONS.title, "--focus", String(focus ?? true),
 		]]);
-		assert.deepEqual(callsFor(h, "respawn-pane"), [["respawn-pane", "--workspace", "workspace:2", "--surface", "surface:2", "--command", COMMAND]]);
+		assert.deepEqual(callsFor(h, "respawn-pane").map(effectiveArgv), [["respawn-pane", "--workspace", "workspace:2", "--surface", "surface:2", "--command", COMMAND]]);
 		assert.deepEqual(callsFor(h, "rename-tab"), [["rename-tab", "--workspace", "workspace:2", "--surface", "surface:2", "--title", OPTIONS.title]]);
 		assert.equal(callsFor(h, "list-panes").length, 0);
 	});

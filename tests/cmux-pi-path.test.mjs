@@ -7,6 +7,7 @@ import { test } from "node:test";
 import { buildPiCommand, buildShellCommand, shellEscape } from "../extensions/cmux-core.ts";
 import { openPiSession } from "../extensions/cmux-pi.ts";
 import { orientationHarness } from "./helpers/orientation.mjs";
+import { effectiveCommand } from "./helpers/launch-command.mjs";
 
 const MODE = "PI_CMUX_PI_PATH_MODE";
 function environment(t, values) {
@@ -120,8 +121,10 @@ for (const placement of ["workspace", "right", "down", "tab"]) test(`default min
  const result = await openPiSession(o.pi, h.cwd, { placement, role: "review", prompt: "Review only", focus: false });
  assert.equal(result.ok, true);
  const call = o.calls.find(c => c.args[0] === "respawn-pane");
- assert.ok(call); assert.ok(call.args.at(-1).includes(`exec ${shellEscape(h.pi)}`));
- assert.ok(!call.args.at(-1).includes(h.parentOnly));
+ assert.ok(call);
+ const launched = effectiveCommand(call.args.at(-1));
+ assert.ok(launched.includes(`exec ${shellEscape(h.pi)}`));
+ assert.ok(!launched.includes(h.parentOnly));
  assert.equal(result.orientation.origin.target.surfaceId, o.location.surfaceId);
 });
 

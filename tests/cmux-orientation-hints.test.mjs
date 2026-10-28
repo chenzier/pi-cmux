@@ -9,6 +9,7 @@ import { openPiSession } from "../extensions/cmux-pi.ts";
 import { childNavigationHint, navigationHints, NAVIGATION_MESSAGE, resolveReturnShortcut } from "../lib/orientation/hints.ts";
 import { childBootstrap, encodeBootstrap, marker, rootOrientation } from "../lib/orientation/state.ts";
 import { orientationHarness, target } from "./helpers/orientation.mjs";
+import { effectiveCommand } from "./helpers/launch-command.mjs";
 
 function relatedHarness(t, role = "continue") {
 	const parent = rootOrientation(randomUUID()), originTarget = target();
@@ -95,7 +96,7 @@ test("empty related chat does not rewrite its prompt or start a model turn", asy
 	await h.emit("session_start");
 	const result = await openPiSession(h.pi, h.root, { placement: "right", related: true });
 	assert.ok(result.navigation);
-	const command = h.calls.find(call => call.args[0] === "respawn-pane").args.at(-1);
+	const command = effectiveCommand(h.calls.find(call => call.args[0] === "respawn-pane").args.at(-1));
 	assert.equal(command.includes(" -- "), false);
 	assert.equal(h.ctx.sessionManager.getBranch().some(entry => entry.type === "custom_message"), false);
 });
@@ -131,7 +132,7 @@ test("handoff tool returns exact origin navigation without changing handoff task
 	assert.equal(result.details.navigation.returnCommand, "/cmbk");
 	assert.ok(result.content[0].text.includes(result.details.navigation.originUrl));
 	assert.match(result.content[0].text, /default shortcut: Ctrl\+Alt\+B; configurable/);
-	const command = h.calls.find(call => call.args[0] === "respawn-pane").args.at(-1);
+	const command = effectiveCommand(h.calls.find(call => call.args[0] === "respawn-pane").args.at(-1));
 	assert.ok(command.includes("Continue the current task"));
 	assert.ok(command.includes("Continue with tests"));
 	assert.equal(command.includes("cmux://"), false, "hints are child context, not edits to the task prompt");

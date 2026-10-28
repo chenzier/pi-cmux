@@ -7,6 +7,7 @@ import registerMessaging from '../extensions/cmux-messages.ts';
 import { makeEnvelope } from '../lib/messaging/protocol.ts';
 import { FOLLOWUP_CONTEXT, FOLLOWUP_INTENT } from '../lib/messaging/receipts.ts';
 import { orientationHarness } from './helpers/orientation.mjs';
+import { effectiveCommand } from './helpers/launch-command.mjs';
 async function setup(t,options={}){
  // Fake cmux creation never starts a child. Keep startup polling unconfirmed,
  // but do not spend ten wall-clock seconds per fixture waiting for its binding.
@@ -27,7 +28,7 @@ test('authorized fresh launch embeds exact return route and grants only that chi
   return {code:0,killed:false,stdout:JSON.stringify({workspace_ref:'workspace:2',surface_ref:'surface:2',...(both?{surface_id:'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'}:{})})};
  }}),result=await h.invoke({returnResults:true,role:'review',prompt:'Review auth; do not modify files',focus:false});await h.messaging.worker.tick();
  assert.equal(result.details.automaticReturn.state,'awaiting-live-child-binding');const id=result.details.automaticReturn.requestId;assert.match(id,/^[a-f0-9-]{36}$/);assert.equal(result.details.orientation.taskId,h.runtime.state.taskId);
- const command=h.calls.find(c=>c.args[0]==='respawn-pane').args.at(-1);assert.ok(command.includes(id));assert.ok(command.includes(h.location.surfaceId));assert.ok(command.includes('cmux_message_send'));assert.ok(command.includes('kind result'));assert.ok(command.includes('Review auth; do not modify files'));
+ const command=effectiveCommand(h.calls.find(c=>c.args[0]==='respawn-pane').args.at(-1));assert.ok(command.includes(id));assert.ok(command.includes(h.location.surfaceId));assert.ok(command.includes('cmux_message_send'));assert.ok(command.includes('kind result'));assert.ok(command.includes('Review auth; do not modify files'));
  const owner={surfaceId:h.location.surfaceId,sessionId:h.ctx.sessionManager.getSessionId(),conversationId:h.runtime.state.conversationId,taskId:h.runtime.state.taskId};
  const peer={...owner,surfaceId:result.details.created.surface_id,sessionId:randomUUID(),conversationId:result.details.orientation.conversationId};
  const envelope=makeEnvelope(peer,owner,id,'result','Delegated review complete');h.queue.push({id:randomUUID(),thread_id:randomUUID(),sender_surface_id:peer.surfaceId,recipient_surface_id:owner.surfaceId,body:JSON.stringify(envelope),state:'queued',in_reply_to:null});
@@ -36,7 +37,7 @@ test('authorized fresh launch embeds exact return route and grants only that chi
 });
 test('automatic return instructions stay compact without dropping routing or delivery limits',async t=>{
  const h=await setup(t),result=await h.invoke({returnResults:true,role:'review',prompt:'Review only; do not edit',focus:false});
- const command=h.calls.find(c=>c.args[0]==='respawn-pane').args.at(-1),start=command.indexOf('\n\n[Host result return]\n');
+ const command=effectiveCommand(h.calls.find(c=>c.args[0]==='respawn-pane').args.at(-1)),start=command.indexOf('\n\n[Host result return]\n');
  assert.ok(start>=0,'host return instructions must be separate from the task');
  const suffix=command.slice(start);
  assert.ok(Buffer.byteLength(suffix,'utf8')<=460,'bound appended instructions, not the whole launch request');

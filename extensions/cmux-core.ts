@@ -2,6 +2,7 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { accessSync, constants, statSync } from "node:fs";
 import { basename, delimiter, dirname, resolve } from "node:path";
 import { uuid } from "../lib/orientation/state.ts";
+import { prepareLaunchCommand } from "../lib/launch-command.ts";
 
 const CMUX_TIMEOUT_MS = 5000;
 const SPLIT_READY_ATTEMPTS = 20;
@@ -380,19 +381,23 @@ async function respawnSurface(
 	await renameSurfaceTab(pi, workspaceRef, surfaceRef, title);
 	checkCreatedLaunch(checkLaunch);
 	let failure: string;
+	// respawn-pane sends the command twice, so a long command can cross cmux
+	// 0.65.2's 4 KiB request-classification window and lose its reply (#21222).
+	const launch = prepareLaunchCommand(command);
 	try {
 		const result = await execCmux(pi, [
-			"respawn-pane", "--workspace", workspaceRef, "--surface", surfaceRef, "--command", command,
+			"respawn-pane", "--workspace", workspaceRef, "--surface", surfaceRef, "--command", launch.command,
 		]);
 		if (result.ok) return { ok: true };
 		failure = result.error || failureMessage;
 	} catch (error) { failure = error instanceof Error ? error.message : String(error); }
 	// Creation and command dispatch are separate effects. A lost respawn reply
 	// is not evidence that the command did not run, nor permission to replay it.
-	const bytes = Buffer.byteLength(command, "utf8");
-	const hint = /Socket closed before reply/i.test(failure) && bytes >= 1900
-		? " This may match cmux 0.65.2's known large-request routing bug; command size is diagnostic, not proof of the cause." : "";
-	return { ok: false, error: `Created cmux surface ${surfaceRef} in ${workspaceRef}, but child command dispatch was not confirmed. Inspect this surface before retrying; do not relaunch automatically. ${failure} (Launch command: ${bytes} UTF-8 bytes.)${hint}` };
+	const bytes = launch.originalBytes;
+	const scripted = launch.scriptPath ? ` Script: ${launch.scriptPath}.` : "";
+	const hint = /Socket closed before reply/i.test(failure)
+		? ` This may match cmux 0.65.2's known large-request routing bug (manaflow-ai/cmux#21222); command size is diagnostic, not proof of the cause.${launch.scriptPath ? " The command was already scripted to keep the request small." : ""}` : "";
+	return { ok: false, error: `Created cmux surface ${surfaceRef} in ${workspaceRef}, but child command dispatch was not confirmed. Inspect this surface before retrying; do not relaunch automatically. ${failure} (Launch command: ${bytes} UTF-8 bytes.)${scripted}${hint}` };
 }
 
 export async function openCommandInNewWorkspace(
@@ -457,6 +462,10 @@ async function openLocalCommandSurface(
 	if (!caps.ok || caps.stdout.length > 1_048_576 || !Array.isArray(methods) || !methods.includes(method)) throw new Error("cmux local-context creation is unavailable; no launch attempted");
 	await options.beforeEffect?.(source);
 	options.checkLaunch?.();
+	// Long commands go through a private script so the socket request stays
+	// small and survives cmux 0.65.2's 4 KiB classification window (#21222).
+	const launch = prepareLaunchCommand(command);
+	const initialCommand = launch.scriptPath ? launch.command : `/bin/sh -c ${shellEscape(command)}`;
 	let created: Record<string, unknown>;
 	try {
 		// initial_command and remote_context are one server-side operation. Never
@@ -465,7 +474,7 @@ async function openLocalCommandSurface(
 			window_id: windowId, workspace_id: workspaceId, surface_id: surfaceId,
 			...(placement === "tab" ? { pane_id: paneId } : { direction: placement }),
 			type: "terminal", focus: options.focus ?? true, remote_context: "local",
-			initial_command: `/bin/sh -c ${shellEscape(command)}`,
+			initial_command: initialCommand,
 		})]);
 		if (!result.ok) throw new Error(result.error || "cmux creation failed");
 		if (result.stdout.length > 1_048_576) throw new Error("cmux creation response is too large");
