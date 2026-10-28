@@ -1,4 +1,5 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { basename } from "node:path";
 import { capturePiLaunch, encodeSshLaunch, withSshLaunchEnvironment } from "../lib/ssh/launch.ts";
 import { assertLocalWorkspace } from "../lib/ssh/terminal.ts";
 import { getSshTargetRuntime } from "../lib/ssh/runtime.ts";
@@ -6,7 +7,7 @@ import { currentConversation, prepareOrientation, validateRelation, type Relatio
 import { encodeBootstrap, orientedTitle, type Bootstrap } from "../lib/orientation/state.ts";
 import { navigationHints } from "../lib/orientation/hints.ts";
 import {
-	buildContextualTabTitle,
+	getProjectName,
 	buildPiCommand,
 	formatTabTitle,
 	getCallerInfo,
@@ -22,6 +23,8 @@ export type PiPlacement = "workspace" | "tab" | SplitDirection;
 export interface PiLaunchOptions extends PiCommandOptions, RelationOptions {
 	placement?: PiPlacement;
 	title?: string;
+	/** Internal task label before handoff/return instructions are appended. Empty means no task name. */
+	taskTitle?: string;
 	focus?: boolean;
 }
 
@@ -66,8 +69,10 @@ export async function openPiSession(pi: ExtensionAPI, cwd: string, options: PiLa
 			if (!caller.ok) throw new Error(caller.error);
 			await assertLocalWorkspace(pi, caller.caller); launch.check();
 		}
-		const topic = launch.ticket ? formatTabTitle(options.title || options.prompt, fallbackTitle)
-			: await buildContextualTabTitle(pi, cwd, options.title || options.prompt, fallbackTitle);
+		// SSH launches must not probe the local repository for remote task context.
+		const project = launch.ticket ? basename(launch.ticket.target.remoteCwd) || fallbackTitle : await getProjectName(pi, cwd);
+		const topic = formatTabTitle(options.title?.trim() || (options.taskTitle ?? options.prompt), project);
+		const workspaceTitle = formatTabTitle(options.title, project);
 		launch.check();
 		const seed = prepareOrientation(pi, options, topic);
 		const checkLaunch = () => {
@@ -86,7 +91,7 @@ export async function openPiSession(pi: ExtensionAPI, cwd: string, options: PiLa
 			checkLaunch(); await assertLocalWorkspace(pi, source); checkLaunch();
 		} } : {};
 		const result = placement === "workspace"
-			? await openCommandInNewWorkspace(pi, cwd, command, { title, focus, checkLaunch })
+			? await openCommandInNewWorkspace(pi, cwd, command, { title, workspaceTitle, focus, checkLaunch })
 			: placement === "tab"
 				? await openCommandInNewTab(pi, command, { tabTitle: title, focus, checkLaunch, ...protectedOptions })
 				: await openCommandInNewSplit(pi, placement, command, { tabTitle: title, focus, checkLaunch, ...protectedOptions });

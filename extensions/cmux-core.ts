@@ -190,7 +190,8 @@ export function formatTabTitle(value: string | undefined, fallback: string): str
 	return `${title.slice(0, MAX_TAB_TITLE_LENGTH - 3).trimEnd()}...`;
 }
 
-async function getTabTitleContext(pi: ExtensionAPI, cwd: string): Promise<string> {
+/** Repository basename, or directory basename when git is unavailable. */
+export async function getProjectName(pi: ExtensionAPI, cwd: string): Promise<string> {
 	try {
 		const result = await pi.exec("git", ["rev-parse", "--show-toplevel"], {
 			cwd,
@@ -214,7 +215,7 @@ export async function buildContextualTabTitle(
 	fallback: string,
 ): Promise<string> {
 	const title = normalizeTabTitle(value, fallback);
-	const context = normalizeTabTitle(await getTabTitleContext(pi, cwd), "");
+	const context = normalizeTabTitle(await getProjectName(pi, cwd), "");
 	return formatTabTitle(context ? `${title}${TAB_TITLE_SEPARATOR}${context}` : title, title);
 }
 
@@ -404,7 +405,7 @@ export async function openCommandInNewWorkspace(
 	pi: ExtensionAPI,
 	cwd: string,
 	command: string,
-	options: { title: string; focus?: boolean; checkLaunch?: () => void },
+	options: { title: string; workspaceTitle?: string; focus?: boolean; checkLaunch?: () => void },
 ): Promise<CommandOpenResult> {
 	const callerResult = await getCallerInfo(pi);
 	if (!callerResult.ok) return callerResult;
@@ -425,7 +426,7 @@ export async function openCommandInNewWorkspace(
 			// Keep refs for command targeting and UUIDs for exact return authorization.
 			"--json", "--id-format", "both", "workspace", "create",
 			"--window", windowRef, "--cwd", cwd,
-			"--name", formatTabTitle(options.title, "Pi"), "--focus", String(options.focus ?? true),
+			"--name", formatTabTitle(options.workspaceTitle ?? options.title, "Pi"), "--focus", String(options.focus ?? true),
 		]);
 	} catch (error) { return creationFailure(error instanceof Error ? error.message : String(error)); }
 	if (!result.ok) return creationFailure(result.error || "Failed to create cmux workspace");

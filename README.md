@@ -53,6 +53,8 @@ Package notifications default to off to avoid duplicate alerts. Zoxide is needed
 | Continue in worktree | `/cmcv -c <branch> [--from <ref>] [note]` |
 | Peer messages | `/cmmsg inbox`, `/cmmsg status`, `/cmmsg on`, `/cmmsg off` |
 
+New Pi workspaces default to the project name. Tabs use an available task name, otherwise the project name plus role/task tag. Explicit launch titles and `/name` take priority; this policy makes no extra model calls. See [naming](docs/usage.md#conversation-tab-titles).
+
 You can also ask Pi to open a tool, browser or another Pi session. Use `role: "review"` for a same-task reviewer without copied history; `continueSession: true` hands off context. Opt-in `returnResults: true` returns delegated findings as best-effort follow-ups, not permission for fixes. See [usage](docs/usage.md).
 
 **Inspect cmux before retrying a failed open:** a surface may already exist. Creation is never retried automatically. `cmux_start_pi` checks for the exact child’s live Pi binding for up to 10 seconds and warns the parent if startup remains unconfirmed; a binding is not task readiness or completion.

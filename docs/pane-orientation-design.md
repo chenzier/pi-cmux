@@ -36,6 +36,8 @@ Private local bindings under `<agent-dir>/pi-cmux/orientation/` hold surface/ses
 
 Titles reserve role/task tag within 48 characters: `Check login · review [ab12]`. Only topic is truncated. Detailed conversation markers stay in status/metadata; equal titles do not imply equal identities. No task-specific native border colors are implemented.
 
+Project names are the fallback for direct sessions and new Pi workspaces. Tabs prefer an available task title; explicit launch titles override workspace defaults and `/name` overrides tab fallbacks. Launch task labels are kept separate from appended handoff/return instructions. Existing workspaces are not renamed. Reload/resume upgrades legacy generic `Pi` topics for display without replacing their saved identities. This policy makes no model requests; optional model-generated naming remains separate.
+
 Manual/automatic names change topic, not identity. Child renames are serialized and lifecycle-cancelled. Protected creation starts the child in the create RPC and names it best-effort afterward; workspace/standalone legacy paths name before respawn. Startup naming is not a readiness guarantee.
 
 At before_agent_start, related/handoff sessions receive a visible origin-link/return note once per active conversation/shortcut configuration. Empty chats are not awakened; user prompts/history are unchanged. Launch results expose the same origin help. Neither note nor label grants execution or messaging authority.

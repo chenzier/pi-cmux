@@ -176,11 +176,12 @@ test("/cmn reports creation failures", async (t) => {
 	assert.equal(h.callsFor("respawn-pane").length, 0);
 });
 
-test("/cmn normalizes and bounds the task-derived sidebar title", async (t) => {
+test("/cmn keeps a project workspace label and bounds the task-derived tab title", async (t) => {
 	const h = harness(t);
 	await h.commands.get("cmn").handler(`  Task\n   ${"long ".repeat(40)}  `, h.ctx);
 	const args = h.callsFor("workspace")[0].args;
-	const title = args[args.indexOf("--name") + 1];
+	assert.equal(args[args.indexOf("--name") + 1], "project's files");
+	const title = h.callsFor("rename-tab")[0].args.at(-1);
 	assert.match(title, /^Task long /);
 	assert.ok(title.length <= 48);
 	assert.ok(title.endsWith("..."));
@@ -194,6 +195,7 @@ for (const placement of [undefined, "workspace", "right", "down", "tab"]) {
 		const launch = h.launch();
 		assert.deepEqual(launch.args, ["--provider", "openai", "--model", "example", "--thinking", "high", "--", "--help"]);
 		assert.equal(result.details.continueSession, false);
+		assert.equal(result.details.title, "Auth review", "explicit names are not rewritten or suffixed with the project");
 		assert.equal(result.details.cwd, h.cwd);
 		assert.equal(launch.cwd, h.cwd);
 		assert.equal(result.details.placement, placement ?? "workspace");
@@ -217,12 +219,13 @@ for (const placement of ["workspace", "right", "down", "tab"]) {
 			assert.equal(h.launch().cwd, target);
 			assert.equal(result.details.cwd, target);
 			assert.match(result.content[0].text, /Working directory:/);
-			assert.match(result.details.title, /^Review this repo · other repo/);
+			assert.equal(result.details.title, "Review this repo");
 			assert.ok(h.calls.some((call) => call.command === "git" && call.options.cwd === target));
 			assert.equal(h.ctx.cwd, h.cwd, "source directory must not change");
 			if (placement === "workspace") {
 				const args = h.callsFor("workspace")[0].args;
 				assert.equal(args[args.indexOf("--cwd") + 1], target);
+				assert.match(args[args.indexOf("--name") + 1], /^other repo/);
 			}
 		});
 	}
@@ -246,10 +249,22 @@ for (const pathKind of ["missing", "file", "file-parent"]) {
 	});
 }
 
-test("tool can open an empty fresh chat", async (t) => {
+test("tool can open an empty fresh chat with a project-based name", async (t) => {
 	const h = harness(t);
-	await h.invoke();
+	const result = await h.invoke();
 	assert.deepEqual(h.launch().args, []);
+	assert.equal(result.details.title, "project's files");
+	const args = h.callsFor("workspace")[0].args;
+	assert.equal(args[args.indexOf("--name") + 1], "project's files");
+});
+
+test("handoffs reuse an available session name without renaming the new project workspace", async (t) => {
+	const h = harness(t);
+	h.ctx.sessionManager.appendSessionInfo("Authentication task");
+	const result = await h.invoke({ continueSession: true, prompt: "Next: test refresh tokens" });
+	assert.equal(result.details.title, "Authentication task");
+	const args = h.callsFor("workspace")[0].args;
+	assert.equal(args[args.indexOf("--name") + 1], "project's files");
 });
 
 for (const [params, pattern] of [
@@ -368,10 +383,12 @@ test("worktree handoff creates a branch and persists summary without copying dir
 
 test("legacy continuation commands keep their split placements", async (t) => {
 	const h = harness(t, { extension: cmuxContinueExtension });
+	h.ctx.sessionManager.appendSessionInfo("Authentication task");
 	for (const [name, direction] of [["cmcv", "right"], ["cmch", "down"]]) {
 		await h.commands.get(name).handler("Focus on tests", h.ctx);
 		const args = h.callsFor("new-split").at(-1).args;
 		assert.equal(args[commandOffset(args) + 1], direction);
+		assert.equal(h.callsFor("rename-tab").at(-1).args.at(-1), "Authentication task");
 	}
 	assert.equal(h.callsFor("workspace").length, 0);
 });

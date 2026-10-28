@@ -166,6 +166,13 @@ Approval can start a Pi turn; queued is not processed. Navigation/cancellation c
 
 ## Conversation tab titles
 
+Naming uses the project and an available task name without an extra model request:
+
+- **New Pi workspaces:** repository basename, or directory basename outside git. An explicit launch `title` overrides this default. Existing workspaces are not renamed. SSH tab fallbacks use the selected remote directory name without probing the local repository.
+- **Tabs:** use the launch title or task prompt, an existing session name, or a saved topic when available. Without a task name, use the project name instead of `Pi`. Tracked sessions retain their role/task tag, for example `Fix login · review [ab12]` or `pi-cmux · main [ab12]`.
+- **Explicit names:** `/name` wins over the fallback. Launch titles are not automatically suffixed with the project name. Handoffs reuse an available session name; empty chats and directory jumps use the project fallback.
+- **Reload/resume:** old generic `Pi` defaults upgrade to the project label without changing conversation identity. Saved task names remain available even when model-generated naming is off.
+
 Model-generated topics default to off. Enable `PI_CMUX_AUTOTITLE=1` or `"pi-cmux": { "autotitle": true }` in settings.
 
 After successful settlement, a background request names the current tab using up to four recent user/assistant texts, 300 characters each. No images/tool messages are sent; provider charges may apply. `/name` takes priority. Successful titles persist; clearing `/name` permits automatic naming again. Runs only in interactive cmux sessions.

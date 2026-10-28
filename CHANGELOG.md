@@ -6,6 +6,10 @@
 
 - `/cm` pane switcher: a transient overlay that lists live cmux terminal and browser tabs, filters as you type by workspace, title, URL or agent, and jumps by revalidated surface UUID. A compact 64-column overlay with explicit workspace headers, two-line tab results, pane/tab locations, theme-colored borders, agent states and shortcut hints makes the hierarchy easier to scan. Agent labels come only from cmux metadata; rows fall back to the surface type. Optional `PI_CMUX_SWITCHER_KEY` adds a Pi-local shortcut (`off` by default). No persistence, sidebar change, pane creation or model turn.
 
+### Changed
+
+- Use project-based naming defaults: new Pi workspaces use the repository/directory name, tabs prefer available task names, and direct/resumed sessions no longer fall back to generic `Pi` when project context exists. Preserve explicit launch titles and `/name`, reuse session names for handoffs, and keep naming separate from appended host instructions. No additional model requests; existing workspaces are not renamed.
+
 ### Fixed
 
 - Keep workspace headers visible while scrolling the pane switcher, preserve window and duplicate-workspace disambiguation when filtering, and bound workspace prefixes so long names cannot hide tab titles. Short terminals drop chrome to retain complete results; terminals too small for a result show a resize message and cannot accept an invisible selection.

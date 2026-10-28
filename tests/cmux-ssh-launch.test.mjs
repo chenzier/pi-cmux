@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { randomUUID } from "node:crypto";
+import { basename } from "node:path";
 import { openPiSession } from "../extensions/cmux-pi.ts";
 import startExtension from "../extensions/cmux-start.ts";
 import { resolveHandoffTarget } from "../extensions/cmux-continue.ts";
@@ -118,6 +119,14 @@ test("fresh/related/review/resumed SSH Pi stays local and child selection is onl
 		assert.equal(child.calls.length, 0); assert.equal(child.entries.at(-1).data.sessionId, "child");
 		assert.equal(h.runtime.snapshot().state, "ready"); assert.equal(h.ctx.cwd, "/local/project");
 	}
+});
+
+test("an unnamed SSH Pi launch uses the selected remote directory, not the local project", async () => {
+	const h = harness(); h.ready();
+	const result = await openPiSession(h.pi, h.ctx.cwd, { placement: "tab", focus: false });
+	assert.equal(result.ok, true);
+	assert.equal(result.title, basename(target.remoteCwd));
+	assert.equal(h.calls.some(call => call.file === "git"), false);
 });
 
 test("bootstrap consumes once, rejects replay/foreign owner/cwd/saved conflicts without connecting", () => {

@@ -1,8 +1,10 @@
 import { randomUUID } from "node:crypto";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { getAgentDir, type ExtensionAPI, type ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { execCmux } from "../../extensions/cmux-core.ts";
+import { execCmux, getProjectName } from "../../extensions/cmux-core.ts";
 import { locateSurface } from "./navigation.ts";
+import { hasSshIntent } from "../ssh/launch.ts";
+import { getSshTargetRuntime } from "../ssh/runtime.ts";
 import { childNavigationHint, navigationHints, NAVIGATION_MESSAGE, resolveReturnShortcut } from "./hints.ts";
 import {
 	BINDING_TTL_MS, BOOTSTRAP_ENV, ORIENTATION_ENTRY, BindingStore, childBootstrap, decodeBootstrap,
@@ -73,6 +75,7 @@ export class OrientationRuntime {
 	private renameQueue: Promise<unknown> = Promise.resolve();
 	private titleVersion = 0;
 	private topic = "Pi";
+	private fallbackTopic = "Pi";
 	readonly pi: ExtensionAPI;
 	readonly store: BindingStore;
 	constructor(pi: ExtensionAPI, store: BindingStore) { this.pi = pi; this.store = store; }
@@ -96,7 +99,7 @@ export class OrientationRuntime {
 	}
 	async renameTopic(topic: string, signal?: AbortSignal): Promise<boolean> {
 		if (!this.state || !this.target || signal?.aborted) return false;
-		this.topic = topicText(topic) || this.state.topic;
+		this.topic = topicText(topic) || this.fallbackTopic;
 		const version = ++this.titleVersion, generation = this.generation;
 		const state = this.state, target = this.target;
 		const jobSignal = signal ? AbortSignal.any([signal, this.lifecycle.signal]) : this.lifecycle.signal;
@@ -154,7 +157,7 @@ export class OrientationRuntime {
 		} };
 	}
 	manualTitle(ctx: ExtensionContext): void {
-		if (this.state) void this.renameTopic(ctx.sessionManager.getSessionName() || this.state.topic);
+		if (this.state) void this.renameTopic(ctx.sessionManager.getSessionName() || this.fallbackTopic);
 	}
 	private renew(): void {
 		if (!this.state || !this.target) return;
@@ -192,7 +195,14 @@ export class OrientationRuntime {
 			}
 		}
 		const restored = Boolean(state) && !seed;
+		const remote = getSshTargetRuntime(this.pi)?.snapshot().target;
+		const project = topicText(hasSshIntent(this.pi)
+			? basename(remote?.remoteCwd ?? "") || "Pi"
+			: await getProjectName(this.pi, ctx.cwd)) || "Pi";
+		if (generation !== this.generation) return;
 		state ??= rootOrientation(owner);
+		// Upgrade old generic defaults without changing saved task/conversation IDs.
+		this.fallbackTopic = state.topic && state.topic !== "Pi" ? state.topic : project;
 		this.state = state;
 		this.context = ctx;
 		this.target = { windowId, workspaceId, paneId, surfaceId };
@@ -203,7 +213,7 @@ export class OrientationRuntime {
 			this.timer = setInterval(() => { try { this.renew(); } catch { this.stop(); } }, 5000);
 			this.timer.unref();
 			this.showOrigin();
-			let topic = ctx.sessionManager.getSessionName() || state.topic;
+			let topic = seed ? state.topic : ctx.sessionManager.getSessionName() || this.fallbackTopic;
 			if (!seed && !ctx.sessionManager.getSessionName()) {
 				for (const entry of [...ctx.sessionManager.getBranch()].reverse()) {
 					if (entry.type !== "custom" || entry.customType !== "pi-cmux.autotitle") continue;
@@ -212,7 +222,7 @@ export class OrientationRuntime {
 					break;
 				}
 			}
-			void this.renameTopic(seed ? state.topic : topic);
+			void this.renameTopic(topic);
 		} catch (error) { this.stop(); throw error; }
 	}
 }

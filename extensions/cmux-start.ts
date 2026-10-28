@@ -16,7 +16,7 @@ import {
 	type PiLaunchOptions,
 } from "./cmux-pi.ts";
 
-interface StartPiParams extends Omit<PiLaunchOptions, "sessionFile"> {
+interface StartPiParams extends Omit<PiLaunchOptions, "sessionFile" | "taskTitle"> {
 	cwd?: string;
 	continueSession?: boolean;
 	returnResults?: boolean;
@@ -178,10 +178,9 @@ export default function cmuxStartExtension(pi: ExtensionAPI) {
 				const ticket = messaging && await messaging.prepareReturn(ctx);
 				check();
 				if (ticket) prompt = `${prompt}\n\n[Host result return]\nOn completion, cmux_message_send: target ${ticket.owner.surfaceId}, requestId ${ticket.requestId}, kind result; text concise findings with report paths/limits. Questions only if blocked on this task; optional progress stays quiet. Expires in 30 min or on parent abort/session change. Do not wait for replies, auto-retry unknown sends, launch workers or expand scope. Queued is not processing confirmation.`;
-				const title = params.title?.trim() || (params.continueSession ? ctx.sessionManager.getSessionName() : undefined)
-					|| params.prompt?.trim() || (params.continueSession ? "Continue" : "Pi");
+				const taskTitle = (params.continueSession ? ctx.sessionManager.getSessionName() : undefined) || params.prompt?.trim() || "";
 				signal?.throwIfAborted();
-				const result = await openPiSession(pi, cwd, { ...params, sessionFile, prompt, title,
+				const result = await openPiSession(pi, cwd, { ...params, sessionFile, prompt, taskTitle,
 					related: params.continueSession || params.returnResults ? true : params.related,
 					role: params.role ?? (params.continueSession ? "continue" : undefined),
 				}, "Pi", seed => {
