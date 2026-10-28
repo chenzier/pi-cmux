@@ -6,6 +6,14 @@ Version-1 `pi-cmux.orientation` entries store owning session ID, random task/con
 
 Fresh launches default to independent tasks. Related/review launches share a task without history; continuation shares the task with handoff context. Contradictory options fail before creation. Every tracked child records its immediate creator—not the task root—even when independent.
 
+## Best-effort child memory and placement
+
+Each orientation runtime keeps a bounded map of its latest 64 successfully dispatched children. Records contain task/conversation/role, immediate parent session/conversation, exact created surface UUID, placement and observed binding state; no prompts or topics. Missing orientation/UUID evidence is not guessed. The map is local to the creator, cleared on reset/stop, and never reconstructed by scanning sessions or cmux.
+
+Independent tasks default to workspaces. Related/review agents default to a right split until the creator remembers a same-task split, then tabs; background related agents and continuations default to tabs. Explicit placement overrides policy. Background tabs and explicitly separate workspaces do not consume the first collaborator split. Repository location does not determine task membership.
+
+Snapshots validate exact live bindings, pin the first observed child session, and label lost/replaced/invalid bindings unknown—not completed or stopped. Unknown remembered splits still favor tabs. Memory is advisory layout metadata only: no task readiness/completion, supervision, child termination, persistent/shared registry, automatic retry, or execution/messaging authority. Launch tool results expose direct children in `details.children`; existing child orientation metadata supplies the reverse parent link.
+
 ## Bootstrap
 
 Launch environment carries bounded validated base64url JSON, consumed/removed once before descendants can inherit it. New wire format:

@@ -8,6 +8,7 @@
 
 ### Changed
 
+- Default Pi placement by task relationship: independent tasks use workspaces; the first active same-task agent/reviewer uses a right split; additional/background collaborators and handoffs use tabs. Explicit placement wins. Reuse existing origin identities and remember up to 64 exact children per creator in memory; expose binding-only child snapshots in launch results without claiming task completion, supervising processes or adding a persistent registry.
 - Use project-based naming defaults: new Pi workspaces use the repository/directory name, tabs prefer available task names, and direct/resumed sessions no longer fall back to generic `Pi` when project context exists. Preserve explicit launch titles and `/name`, reuse session names for handoffs, and keep naming separate from appended host instructions. No additional model requests; existing workspaces are not renamed.
 
 ### Fixed

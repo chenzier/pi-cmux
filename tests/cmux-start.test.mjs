@@ -109,7 +109,7 @@ test("bundle advertises browser, terminal, and Pi tools and registers /cmn, not 
 		assert.equal(h.commands.has(name), false, `${name} is no longer bundled`);
 	}
 	const tool = h.tools.get("cmux_start_pi");
-	assert.equal(tool.parameters.properties.placement.default, "workspace");
+	assert.equal(tool.parameters.properties.placement.default, undefined, "placement depends on the task relationship");
 	assert.equal(tool.parameters.properties.continueSession.default, false);
 	assert.equal(tool.parameters.properties.cwd.type, "string");
 	assert.equal(tool.parameters.properties.cwd.minLength, 1);
@@ -258,13 +258,22 @@ test("tool can open an empty fresh chat with a project-based name", async (t) =>
 	assert.equal(args[args.indexOf("--name") + 1], "project's files");
 });
 
-test("handoffs reuse an available session name without renaming the new project workspace", async (t) => {
+test("handoffs reuse an available session name in a same-workspace tab", async (t) => {
 	const h = harness(t);
 	h.ctx.sessionManager.appendSessionInfo("Authentication task");
 	const result = await h.invoke({ continueSession: true, prompt: "Next: test refresh tokens" });
 	assert.equal(result.details.title, "Authentication task");
-	const args = h.callsFor("workspace")[0].args;
-	assert.equal(args[args.indexOf("--name") + 1], "project's files");
+	assert.equal(result.details.placement, "tab");
+	assert.equal(h.callsFor("workspace").length, 0);
+	assert.equal(h.callsFor("new-surface").length, 1);
+});
+
+test("handoff tab defaults survive an explicitly chosen chat role, while explicit placement wins", async (t) => {
+	const h = harness(t);
+	const implicit = await h.invoke({ continueSession: true, role: "chat", prompt: "Continue testing" });
+	assert.equal(implicit.details.placement, "tab");
+	const explicit = await h.invoke({ continueSession: true, role: "chat", placement: "workspace", prompt: "Continue testing" });
+	assert.equal(explicit.details.placement, "workspace");
 });
 
 for (const [params, pattern] of [
@@ -378,7 +387,8 @@ test("worktree handoff creates a branch and persists summary without copying dir
 	assert.match(text, /dirty.txt/);
 	assert.doesNotMatch(text, /History should not be copied/);
 	await assert.rejects(() => h.invoke({ continueSession: true, branch: "fix/login" }), /Branch already exists/);
-	assert.equal(h.callsFor("workspace").length, 1);
+	assert.equal(h.callsFor("workspace").length, 0);
+	assert.equal(h.callsFor("new-surface").length, 1);
 });
 
 test("legacy continuation commands keep their split placements", async (t) => {

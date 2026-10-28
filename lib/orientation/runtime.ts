@@ -14,6 +14,31 @@ import {
 
 const runtimes = new WeakMap<ExtensionAPI, OrientationRuntime>();
 export interface RelationOptions { related?: boolean; role?: "chat" | "review" | "continue" }
+export interface ChildConversation {
+	taskId: string;
+	conversationId: string;
+	role: Role;
+	parentConversationId: string;
+	parentSessionId: string;
+	surfaceId: string;
+	placement: "workspace" | "right" | "down" | "tab";
+	sessionId?: string;
+	binding: "unconfirmed" | "bound" | "unknown";
+}
+
+/** Best-effort direct children of the current conversation, not a process/task monitor. */
+export function conversationChildren(pi: ExtensionAPI): ChildConversation[] {
+	return currentConversation(pi) ? runtimes.get(pi)!.children() : [];
+}
+
+export function rememberChildConversation(pi: ExtensionAPI, seed: Bootstrap | undefined, surface: unknown, placement: ChildConversation["placement"]): void {
+	const own = currentConversation(pi), origin = seed?.origin, surfaceId = uuid(surface);
+	if (!own || !seed || !origin || !surfaceId || surfaceId === own.target.surfaceId
+		|| origin.sessionId !== own.state.sessionId || origin.conversationId !== own.state.conversationId
+		|| origin.taskId !== own.state.taskId || origin.role !== own.state.role || origin.target.surfaceId !== own.target.surfaceId) return;
+	runtimes.get(pi)!.rememberChild({ taskId: seed.taskId, conversationId: seed.conversationId, role: seed.role,
+		parentConversationId: origin.conversationId, parentSessionId: origin.sessionId, surfaceId, placement, binding: "unconfirmed" });
+}
 
 export function validateRelation(options: RelationOptions): void {
 	if (options.related !== undefined && typeof options.related !== "boolean") throw new Error("related must be a boolean");
@@ -68,6 +93,7 @@ export class OrientationRuntime {
 	readonly token = randomUUID();
 	readonly returnShortcut = resolveReturnShortcut(process.env.PI_CMUX_RETURN_KEY);
 	private generation = 0;
+	private readonly childConversations = new Map<string, ChildConversation>();
 	private timer: ReturnType<typeof setInterval> | undefined;
 	private consumedBootstrap = false;
 	private context: ExtensionContext | undefined;
@@ -80,7 +106,23 @@ export class OrientationRuntime {
 	readonly store: BindingStore;
 	constructor(pi: ExtensionAPI, store: BindingStore) { this.pi = pi; this.store = store; }
 
+	rememberChild(child: ChildConversation): void {
+		this.childConversations.set(child.conversationId, { ...child });
+		// Bound memory; no prompts, cross-process registry, or recovery scan.
+		if (this.childConversations.size > 64) this.childConversations.delete(this.childConversations.keys().next().value!);
+	}
+	children(): ChildConversation[] {
+		return [...this.childConversations.values()].map(child => {
+			const binding = this.store.read(child.surfaceId);
+			if (binding && liveBinding(binding, { ...child, sessionId: child.sessionId ?? binding.sessionId })) {
+				child.sessionId ??= binding.sessionId;
+				child.binding = "bound";
+			} else if (binding || child.sessionId) child.binding = "unknown";
+			return { ...child };
+		});
+	}
 	stop(): void {
+		this.childConversations.clear();
 		this.generation++;
 		this.lifecycle.abort();
 		this.lifecycle = new AbortController();

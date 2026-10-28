@@ -40,6 +40,18 @@ These start independent chats. Explicit paths need no zoxide; fuzzy queries do. 
 
 Ask Pi to start a session to use `cmux_start_pi`. It accepts workspace/right/down/tab placement, title, focus, provider/model and thinking. `cwd` accepts existing absolute, relative or `~/…` directories; omission keeps the current directory. It cannot accompany `continueSession: true`. Sessions focus by default; `focus: false` opens in the background.
 
+Placement follows the task relationship unless explicitly supplied:
+
+| Launch | Default placement |
+|---|---|
+| Independent task | New sidebar workspace |
+| First active same-task agent or reviewer | Right split beside its creator |
+| Further same-task agents after a remembered same-task split | Tab in the caller's workspace |
+| Background same-task agent (`focus: false`) | Tab |
+| Handoff (`continueSession: true` or `role: "continue"`) | Tab |
+
+Explicit placement always wins, including a separate workspace for a reviewer. Repository changes alone do not select placement: use `related: true` or `role: "review"` for the same task, even across directories. `/cmn` stays independent; explicit split/continuation commands retain their directions.
+
 ### Pi startup guard
 
 `cmux_start_pi` distinguishes creation, command dispatch, and observed Pi startup. After a confirmed launch dispatch, it checks the exact returned surface UUID for the launched conversation’s live orientation binding for up to 10 seconds.
@@ -74,6 +86,10 @@ Tabs show topic, role and task tag: `Check login · review [ab12]`. Tags are lab
 | `continueSession: true`, `/cmcv`, `/cmch` | Same task with handoff context |
 
 `related: false` conflicts with review/continue. Writing “review” in a slash prompt does not select a role.
+
+The creator remembers up to 64 successfully dispatched children in memory, using exact task/conversation/parent/surface identities. `cmux_start_pi` results expose these direct relationships in `details.children`. Binding states are `unconfirmed` (no live child binding observed), `bound` (exact live identity observed), or `unknown` (binding lost, invalid or replaced). None proves task readiness or completion. Remembered same-task splits continue to favor tabs when their bindings become unknown; inspect cmux rather than automatically replacing them.
+
+This is best effort, not a shared task-tree service: each creator knows only its own launches. Reload, session replacement and tree navigation clear child memory; existing parent/origin metadata still follows the session. Launches without an active orientation runtime or exact created UUID cannot be tracked. There is no layout reconstruction, child termination, automatic cleanup, or execution/messaging permission from the hierarchy.
 
 ### Return to the exact conversation
 
@@ -231,7 +247,7 @@ Use `/edit src/auth.ts`, `/dev` or `/logs`. Options: `run`, `acceptArgs`, `direc
 
 ## Compatibility
 
-Workspace/browser behavior was tested with cmux **0.64.25**; orientation, ordinary-local-workspace SSH helper/child tabs and the `/cm` switcher with **0.65.2**. The switcher was smoke-tested on 0.65.2 for multi-tab jumps inside one workspace and for exact focus back to the caller; several workspaces/windows and browser targets were exercised with fixtures, not live cmux, and remain unverified live. The 0.3.0 [local startup smoke](startup-smoke.md) passed for one no-prompt sidebar workspace and one protected local-context tab on **0.65.2** with Pi **1.4.0**, including exact child bindings and independent local process/cwd checks. Splits, other native layouts, long prompts and live transport failures remain unverified; no minimum cmux version is certified for protected creation. Missing capabilities or ambiguous identity fail without retry/substitute placement.
+Workspace/browser behavior was tested with cmux **0.64.25**; orientation, ordinary-local-workspace SSH helper/child tabs and the `/cm` switcher with **0.65.2**. The switcher was smoke-tested on 0.65.2 for multi-tab jumps inside one workspace and for exact focus back to the caller; several workspaces/windows and browser targets were exercised with fixtures, not live cmux, and remain unverified live. The 0.3.0 [local startup smoke](startup-smoke.md) passed for one no-prompt sidebar workspace and one protected local-context tab on **0.65.2** with Pi **1.4.0**, including exact child bindings and independent local process/cwd checks. A later [task-aware reviewer smoke](startup-smoke.md#task-aware-placement-follow-up) confirmed omitted placement resolving to a right split with an exact child binding. Other split/native-layout cases, long prompts and live transport failures remain unverified; no minimum cmux version is certified for protected creation. Missing capabilities or ambiguous identity fail without retry/substitute placement.
 
 Launch commands longer than 1 KiB are sent as a short `/bin/sh` wrapper around a private `0600` script, so cmux socket requests stay small; this avoids cmux 0.65.2's 4 KiB request-classification bug ([#21222](https://github.com/manaflow-ai/cmux/issues/21222)), where long prompts could create a pane and then fail with `Socket closed before reply`. Leftover scripts are removed after an hour.
 
